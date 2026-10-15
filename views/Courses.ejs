@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Browse available courses and find your next learning opportunity.">
+    <title>CourseHub | Browse Courses</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <%- include('./components/header') %>
+    <main>
+        <section class="page-banner">
+            <p class="eyebrow">Course catalog</p>
+            <h1>Find a course for you</h1>
+            <p>Explore the catalog, compare course details, and enroll when you're ready.</p>
+        </section>
+        <% if (notice) { %>
+            <div class="notice <%= notice.type %>" role="status"><%= notice.message %></div>
+        <% } %>
+        <section class="content-section courses-section" aria-labelledby="courses-title">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Course catalog</p>
+                    <h2 id="courses-title">Search and browse courses</h2>
+                    <p class="section-copy">Search course titles, descriptions, instructors, or codes, then narrow your results.</p>
+                </div>
+                <span class="catalog-count"><%= courses.length %> courses</span>
+            </div>
+
+            <form class="catalog-filters" action="/courses" method="GET" role="search" aria-label="Search and filter courses">
+                <label class="filter-search" for="course-search">
+                    <span>Search courses</span>
+                    <input id="course-search" type="search" name="q" value="<%= filters.search %>"
+                        placeholder="Title, subject, description, instructor, or code" maxlength="80">
+                </label>
+                <label for="course-category">
+                    <span>Category</span>
+                    <select id="course-category" name="category">
+                        <option value="">All categories</option>
+                        <% categories.forEach((category) => { %>
+                            <option value="<%= category %>" <%= filters.category === category ? 'selected' : '' %>><%= category %></option>
+                        <% }); %>
+                    </select>
+                </label>
+                <label for="course-availability">
+                    <span>Availability</span>
+                    <select id="course-availability" name="availability">
+                        <option value="">All courses</option>
+                        <option value="available" <%= filters.availability === 'available' ? 'selected' : '' %>>Open places</option>
+                    </select>
+                </label>
+                <div class="filter-actions">
+                    <button class="lookup-button" type="submit">Apply filters</button>
+                    <% if (filters.search || filters.category || filters.availability) { %>
+                        <a class="clear-filters" href="/courses">Clear</a>
+                    <% } %>
+                </div>
+            </form>
+            <div class="catalog-tools" data-favorites-tools hidden>
+                <p class="favorites-summary" data-favorites-summary aria-live="polite"></p>
+                <button class="favorites-filter" type="button" data-favorites-filter aria-pressed="false">
+                    <span data-favorites-label>Show saved courses</span>
+                    <span data-favorites-count>0</span>
+                </button>
+            </div>
+
+            <% if (courses.length === 0) { %>
+                <div class="empty-state">
+                    <h3>No matching courses</h3>
+                    <p>Try a different search or clear some filters to see more courses.</p>
+                    <a class="clear-filters empty-clear" href="/courses">Clear filters</a>
+                </div>
+            <% } else { %>
+                <div class="course-grid">
+                    <% courses.forEach((course, index) => { %>
+                        <article class="course-card">
+                            <div class="course-card-top">
+                                <span class="course-icon course-icon-<%= index % 4 %>" aria-hidden="true">
+                                    <%= ['✦', '⌘', '◈', '✳'][index % 4] %>
+                                </span>
+                                <span class="course-category"><%= course.category %></span>
+                            </div>
+                            <button class="favorite-button" type="button"
+                                data-favorite-button data-course-id="<%= course._id %>"
+                                data-course-title="<%= course.title %>"
+                                aria-pressed="false" aria-label="Save <%= course.title %>">
+                                <span data-favorite-icon aria-hidden="true">☆</span>
+                                <span data-favorite-label>Save course</span>
+                            </button>
+                            <p class="course-code"><%= course.code %></p>
+                            <h3><%= course.title %></h3>
+                            <p class="course-description"><%= course.description %></p>
+                            <div class="course-meta">
+                                <span>Instructor</span><strong><%= course.instructor %></strong>
+                            </div>
+                            <div class="course-meta">
+                                <span>Duration</span><strong><%= course.duration %></strong>
+                            </div>
+                            <div class="course-seats">
+                                <span><%= course.enrollmentCount %> enrolled</span>
+                                <span><%= Math.max(course.capacity - course.enrollmentCount, 0) %> places left</span>
+                            </div>
+                            <button class="compare-select" type="button" data-compare-select
+                                data-course-id="<%= course._id %>" aria-pressed="false">
+                                <span data-compare-icon aria-hidden="true">＋</span>
+                                <span data-compare-label>Compare</span>
+                            </button>
+                            <a class="course-link" href="/courses/<%= course._id %>">
+                                View course details <span aria-hidden="true">→</span>
+                            </a>
+                        </article>
+                    <% }); %>
+                </div>
+                <div class="empty-state favorites-empty" data-favorites-empty hidden>
+                    <h3>No saved courses in this view</h3>
+                    <p>Save a course with the star button, or show all courses again.</p>
+                </div>
+                <aside class="compare-tray" data-compare-tray aria-live="polite" hidden>
+                    <div class="compare-tray-copy">
+                        <strong data-compare-count>0 courses selected</strong>
+                        <span data-compare-hint>Select 2–3 courses to compare.</span>
+                    </div>
+                    <div class="compare-tray-actions">
+                        <button class="compare-clear" type="button" data-compare-clear>Clear</button>
+                        <button class="compare-open" type="button" data-compare-open disabled>
+                            Compare courses
+                        </button>
+                    </div>
+                </aside>
+            <% } %>
+        </section>
+        <dialog class="compare-dialog" data-compare-dialog aria-labelledby="compare-dialog-title">
+            <div class="compare-dialog-header">
+                <div>
+                    <p class="eyebrow">Side by side</p>
+                    <h2 id="compare-dialog-title">Compare courses</h2>
+                </div>
+                <button class="compare-close" type="button" data-compare-close aria-label="Close comparison">×</button>
+            </div>
+            <div class="compare-table-wrap" data-compare-table></div>
+        </dialog>
+    </main>
+    <%- include('./components/footer') %>
+    <script src="/app.js" defer></script>
+</body>
+</html>

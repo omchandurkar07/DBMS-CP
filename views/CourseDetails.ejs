@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="<%= course.description %>">
+    <title>CourseHub | <%= course.title %></title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <%- include('./components/header') %>
+    <main>
+        <div class="breadcrumb"><a href="/courses">Courses</a><span aria-hidden="true">/</span><span><%= course.code %></span></div>
+        <% if (notice) { %>
+            <div class="notice <%= notice.type %>" role="status"><%= notice.message %></div>
+        <% } %>
+        <section class="detail-layout">
+            <article class="course-detail-card">
+                <div class="course-card-top">
+                    <span class="course-icon course-icon-0" aria-hidden="true">✦</span>
+                    <span class="course-category"><%= course.category %></span>
+                </div>
+                <p class="course-code"><%= course.code %></p>
+                <h1><%= course.title %></h1>
+                <p class="detail-description"><%= course.description %></p>
+                <div class="detail-facts">
+                    <div><span>Instructor</span><strong><%= course.instructor %></strong></div>
+                    <div><span>Duration</span><strong><%= course.duration %></strong></div>
+                    <div><span>Students enrolled</span><strong><%= course.enrollmentCount %> / <%= course.capacity %></strong></div>
+                    <div><span>Availability</span><strong><%= Math.max(course.capacity - course.enrollmentCount, 0) %> places remaining</strong></div>
+                </div>
+            </article>
+            <aside class="enroll-panel">
+                <p class="eyebrow">Join this course</p>
+                <h2>Ready to enroll?</h2>
+                <% if (currentUser) { %>
+                    <p>Enroll as <strong><%= currentUser.name %></strong> (<%= currentUser.email %>).</p>
+                <% } else { %>
+                    <p>Sign in or create a student account to enroll and keep your courses together.</p>
+                <% } %>
+                <% if (course.enrollmentCount >= course.capacity) { %>
+                    <button class="enroll-button" type="button" disabled>Course is full</button>
+                <% } else if (!currentUser) { %>
+                    <a class="enroll-button auth-enroll-link" href="/login?next=<%= encodeURIComponent(`/courses/${course._id}`) %>">
+                        Sign in to enroll <span aria-hidden="true">→</span>
+                    </a>
+                <% } else { %>
+                    <form class="enroll-form" action="/enroll" method="POST">
+                        <input type="hidden" name="courseId" value="<%= course._id %>">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                        <button class="enroll-button" type="submit">Enroll now <span aria-hidden="true">→</span></button>
+                    </form>
+                <% } %>
+                <a class="back-link" href="/courses">← Back to all courses</a>
+            </aside>
+        </section>
+    </main>
+    <%- include('./components/footer') %>
+</body>
+</html>

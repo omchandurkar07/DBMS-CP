@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Look up your enrolled courses in CourseHub.">
+    <title>CourseHub | My Learning</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <%- include('./components/header') %>
+    <main>
+        <section class="page-banner">
+            <p class="eyebrow">Student dashboard</p>
+            <h1>My learning</h1>
+            <p>See your enrollments and keep your next learning steps together.</p>
+        </section>
+        <% if (notice) { %>
+            <div class="notice <%= notice.type %>" role="status"><%= notice.message %></div>
+        <% } %>
+        <%- include('./components/my-enrollments') %>
+    </main>
+    <%- include('./components/footer') %>
+</body>
+</html>

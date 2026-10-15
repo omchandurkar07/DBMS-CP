@@ -1,0 +1,19 @@
+<header class="site-header">
+    <a class="brand" href="/" aria-label="CourseHub home"><span class="brand-mark">C</span> CourseHub</a>
+    <nav class="main-nav" aria-label="Main navigation">
+        <a href="/">Home</a>
+        <a href="/courses">Browse courses</a>
+        <a href="/my-learning">My learning</a>
+        <% if (currentUser) { %>
+            <a href="/profile">Profile</a>
+            <span class="nav-greeting">Hi, <%= currentUser.name %></span>
+            <form class="nav-auth-form" action="/logout" method="POST">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <button class="nav-auth-button" type="submit">Sign out</button>
+            </form>
+        <% } else { %>
+            <a class="nav-signin" href="/login">Sign in</a>
+            <a class="nav-signup" href="/signup">Create account</a>
+        <% } %>
+    </nav>
+</header>

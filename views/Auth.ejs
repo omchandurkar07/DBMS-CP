@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="<%= mode === 'signup' ? 'Create a CourseHub student account.' : 'Sign in to your CourseHub student account.' %>">
+    <title>CourseHub | <%= mode === 'signup' ? 'Create account' : 'Sign in' %></title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <%- include('./components/header') %>
+    <main class="auth-page">
+        <section class="auth-card" aria-labelledby="auth-title">
+            <p class="eyebrow"><%= mode === 'signup' ? 'Start your learning journey' : 'Welcome back' %></p>
+            <h1 id="auth-title"><%= mode === 'signup' ? 'Create your account' : 'Sign in to CourseHub' %></h1>
+            <p class="auth-intro"><%= mode === 'signup'
+                ? 'One account keeps your course enrollments together.'
+                : 'Sign in to enroll in courses and open your learning dashboard.' %></p>
+
+            <% if (authError) { %>
+                <p class="auth-error" role="alert"><%= authError %></p>
+            <% } %>
+
+            <form class="auth-form" action="/<%= mode %>" method="POST">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <input type="hidden" name="next" value="<%= nextPath %>">
+                <% if (mode === 'signup') { %>
+                    <label for="auth-name">Full name</label>
+                    <input id="auth-name" type="text" name="name" autocomplete="name"
+                        maxlength="80" required>
+                <% } %>
+                <label for="auth-email">Student email</label>
+                <input id="auth-email" type="email" name="email" autocomplete="email"
+                    maxlength="254" required>
+                <label for="auth-password">Password</label>
+                <div class="password-control">
+                    <input id="auth-password" type="password" name="password"
+                        autocomplete="<%= mode === 'signup' ? 'new-password' : 'current-password' %>"
+                        minlength="<%= mode === 'signup' ? 8 : 1 %>" maxlength="128" required>
+                    <button class="password-visibility" type="button" data-password-visibility
+                        aria-label="Show password" aria-pressed="false">Show</button>
+                </div>
+                <% if (mode === 'signup') { %>
+                    <p class="password-hint">Use at least 8 characters.</p>
+                <% } %>
+                <button class="enroll-button" type="submit">
+                    <%= mode === 'signup' ? 'Create account' : 'Sign in' %>
+                    <span aria-hidden="true">→</span>
+                </button>
+            </form>
+
+            <p class="auth-switch">
+                <%= mode === 'signup' ? 'Already have an account?' : 'New to CourseHub?' %>
+                <a href="/<%= mode === 'signup' ? 'login' : 'signup' %>?next=<%= encodeURIComponent(nextPath) %>">
+                    <%= mode === 'signup' ? 'Sign in' : 'Create an account' %>
+                </a>
+            </p>
+        </section>
+    </main>
+    <%- include('./components/footer') %>
+    <script src="/app.js" defer></script>
+</body>
+</html>

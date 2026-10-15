@@ -1,0 +1,46 @@
+<section class="content-section courses-section" id="courses" aria-labelledby="courses-title">
+    <div class="section-heading">
+        <div>
+            <p class="eyebrow">Course catalog</p>
+            <h2 id="courses-title">Courses to get you started</h2>
+            <p class="section-copy">Choose a course and enroll using your student name and email.</p>
+        </div>
+        <span class="catalog-count"><%= courses.length %> courses</span>
+    </div>
+
+    <% if (courses.length === 0) { %>
+        <div class="empty-state">
+            <h3>No courses are available yet</h3>
+            <p>Please check back later for new courses.</p>
+        </div>
+    <% } else { %>
+        <div class="course-grid">
+            <% courses.forEach((course, index) => { %>
+                <article class="course-card">
+                    <div class="course-card-top">
+                        <span class="course-icon course-icon-<%= index % 4 %>" aria-hidden="true">
+                            <%= ['✦', '⌘', '◈', '✳'][index % 4] %>
+                        </span>
+                        <span class="course-category"><%= course.category %></span>
+                    </div>
+                    <p class="course-code"><%= course.code %></p>
+                    <h3><%= course.title %></h3>
+                    <p class="course-description"><%= course.description %></p>
+                    <div class="course-meta">
+                        <span>Instructor</span><strong><%= course.instructor %></strong>
+                    </div>
+                    <div class="course-meta">
+                        <span>Duration</span><strong><%= course.duration %></strong>
+                    </div>
+                    <div class="course-seats">
+                        <span><%= course.enrollmentCount %> enrolled</span>
+                        <span><%= Math.max(course.capacity - course.enrollmentCount, 0) %> places left</span>
+                    </div>
+                    <a class="course-link" href="/courses/<%= course._id %>">
+                        View course details <span aria-hidden="true">→</span>
+                    </a>
+                </article>
+            <% }); %>
+        </div>
+    <% } %>
+</section>

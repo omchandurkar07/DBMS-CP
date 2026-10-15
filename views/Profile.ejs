@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Manage your CourseHub student profile and account details.">
+    <title>CourseHub | Profile</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <%- include('./components/header') %>
+    <main>
+        <section class="page-banner">
+            <p class="eyebrow">Your account</p>
+            <h1>Profile</h1>
+            <p>Manage your student details and see a quick overview of your learning.</p>
+        </section>
+        <% if (notice) { %>
+            <div class="notice <%= notice.type %>" role="status"><%= notice.message %></div>
+        <% } %>
+        <section class="profile-layout" aria-label="Student profile">
+            <article class="profile-card">
+                <div class="profile-avatar" aria-hidden="true"><%= account.name.slice(0, 1).toUpperCase() %></div>
+                <p class="eyebrow">Student profile</p>
+                <h2><%= account.name %></h2>
+                <p class="profile-email"><%= account.email %></p>
+
+                <div class="profile-stats">
+                    <div>
+                        <strong><%= enrollmentCount %></strong>
+                        <span><%= enrollmentCount === 1 ? 'course enrolled' : 'courses enrolled' %></span>
+                    </div>
+                    <div>
+                        <strong><%= account.createdAt.toLocaleDateString() %></strong>
+                        <span>member since</span>
+                    </div>
+                </div>
+            </article>
+
+            <div class="profile-settings">
+                <section class="profile-panel" aria-labelledby="profile-details-title">
+                    <p class="eyebrow">Personal details</p>
+                    <h2 id="profile-details-title">Update your profile</h2>
+                    <p class="profile-panel-copy">Your name appears on your enrollments. Your account email is used to sign in.</p>
+                    <form class="auth-form profile-form" action="/profile" method="POST">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                        <label for="profile-name">Full name</label>
+                        <input id="profile-name" type="text" name="name" value="<%= account.name %>"
+                            autocomplete="name" maxlength="80" required>
+                        <label for="profile-email">Student email</label>
+                        <input id="profile-email" type="email" value="<%= account.email %>" autocomplete="email" disabled>
+                        <button class="enroll-button" type="submit">Save profile <span aria-hidden="true">→</span></button>
+                    </form>
+                </section>
+
+                <section class="profile-security" aria-labelledby="profile-security-title">
+                    <span class="security-icon" aria-hidden="true">✓</span>
+                    <div>
+                        <h2 id="profile-security-title">Password privacy</h2>
+                        <p>Your password is stored as a one-way hash and cannot be viewed here. Use Show on the sign-in form to reveal a password while you type it.</p>
+                    </div>
+                </section>
+            </div>
+        </section>
+    </main>
+    <%- include('./components/footer') %>
+</body>
+</html>
