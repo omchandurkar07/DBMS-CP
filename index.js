@@ -18,6 +18,20 @@ const csrfCookieName = 'coursehub_csrf';
 const sessionLifetimeMs = 7 * 24 * 60 * 60 * 1000;
 const scryptAsync = promisify(scrypt);
 
+function parseConfiguredAccountIds(variableName) {
+    const accountIds = (process.env[variableName] || '')
+        .split(',')
+        .map((id) => id.trim().toLowerCase())
+        .filter(Boolean);
+    if (accountIds.some((id) => !/^[a-f0-9]{24}$/.test(id))) {
+        throw new Error(`${variableName} must contain comma-separated 24-character MongoDB account IDs`);
+    }
+    return new Set(accountIds);
+}
+
+const adminAccountIds = parseConfiguredAccountIds('ADMIN_ACCOUNT_IDS');
+const teacherAccountIds = parseConfiguredAccountIds('TEACHER_ACCOUNT_IDS');
+
 const notices = {
     enrolled: { type: 'success', message: 'You are enrolled! Your course is listed under My learning.' },
     invalid: { type: 'error', message: 'Your request could not be validated. Please try again.' },
@@ -27,12 +41,26 @@ const notices = {
     signedUp: { type: 'success', message: 'Your account is ready. You are now signed in.' },
     signedOut: { type: 'success', message: 'You have been signed out.' },
     profileUpdated: { type: 'success', message: 'Your profile has been updated.' },
-    profileInvalid: { type: 'error', message: 'Enter a name between 1 and 80 characters.' }
+    profileInvalid: { type: 'error', message: 'Enter a name between 1 and 80 characters.' },
+    courseCreated: { type: 'success', message: 'The course has been created.' },
+    courseUpdated: { type: 'success', message: 'The course has been updated.' },
+    courseStatusUpdated: { type: 'success', message: 'The course status has been updated.' }
 };
 
 function getNotice(req) {
     const status = typeof req.query.status === 'string' ? req.query.status : '';
     return notices[status] || null;
+}
+
+function getConfiguredRole(accountId) {
+    const normalizedId = accountId.toString().toLowerCase();
+    if (adminAccountIds.has(normalizedId)) {
+        return 'admin';
+    }
+    if (teacherAccountIds.has(normalizedId)) {
+        return 'teacher';
+    }
+    return 'student';
 }
 
 function escapeRegex(value) {
@@ -83,7 +111,7 @@ function hashToken(token) {
 function safeNextPath(value) {
     if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') ||
         value.startsWith('/login') || value.startsWith('/signup') || value.startsWith('/logout')) {
-        return '/my-learning';
+        return '/dashboard';
     }
     return value;
 }
@@ -115,6 +143,15 @@ function requireCsrf(req, res, next) {
     return next();
 }
 
+function requireRole(...roles) {
+    return (req, res, next) => {
+        if (!req.user || !roles.includes(req.user.role)) {
+            return res.status(403).send('You do not have permission to access this page.');
+        }
+        return next();
+    };
+}
+
 async function createStudentSession(account, res) {
     const token = randomBytes(32).toString('base64url');
     const expiresAt = new Date(Date.now() + sessionLifetimeMs);
@@ -126,9 +163,9 @@ async function createStudentSession(account, res) {
     res.append('Set-Cookie', `${sessionCookieName}=${encodeURIComponent(token)}; ${cookieOptions(sessionLifetimeMs)}`);
 }
 
-async function getCoursesWithEnrollmentCounts(courseFilter = {}) {
+async function getCoursesWithEnrollmentCounts(courseFilter = {}, includeInactive = false) {
     const courseDocuments = await Course.find({
-        isActive: true,
+        ...(!includeInactive ? { isActive: true } : {}),
         ...courseFilter
     }).sort({ title: 1 }).lean();
     const enrollmentCounts = await Enrollment.aggregate([
@@ -178,8 +215,9 @@ app.use(async (req, res, next) => {
                 .select('_id name email')
                 .lean();
             if (account) {
-                req.user = account;
-                res.locals.currentUser = account;
+                const user = { ...account, role: getConfiguredRole(account._id) };
+                req.user = user;
+                res.locals.currentUser = user;
             } else {
                 await StudentSession.deleteOne({ _id: session._id });
                 res.append('Set-Cookie', `${sessionCookieName}=; ${cookieOptions(0)}`);
@@ -272,6 +310,16 @@ app.post('/login', requireCsrf, async (req, res) => {
 
     await createStudentSession(account, res);
     return res.redirect(nextPath);
+});
+
+app.get('/dashboard', requireAuth, (req, res) => {
+    if (req.user.role === 'admin') {
+        return res.redirect('/admin');
+    }
+    if (req.user.role === 'teacher') {
+        return res.redirect('/teacher');
+    }
+    return res.redirect('/my-learning');
 });
 
 app.post('/logout', requireAuth, requireCsrf, async (req, res) => {
@@ -409,6 +457,191 @@ app.get('/my-learning', requireAuth, async (req, res) => {
         studentName: req.user.name,
         notice: getNotice(req)
     });
+});
+
+app.get('/teacher', requireAuth, requireRole('teacher'), async (req, res) => {
+    const [courses, courseCount, activeCourseCount, enrollmentCount, studentCount] = await Promise.all([
+        getCoursesWithEnrollmentCounts({ createdBy: req.user._id }, true),
+        Course.countDocuments(),
+        Course.countDocuments({ isActive: true }),
+        Enrollment.countDocuments(),
+        StudentAccount.countDocuments()
+    ]);
+
+    return res.render('TeacherDashboard.ejs', {
+        courses,
+        overview: { courseCount, activeCourseCount, enrollmentCount, studentCount },
+        notice: getNotice(req)
+    });
+});
+
+app.get('/admin', requireAuth, requireRole('admin'), async (req, res) => {
+    const [accounts, courses, enrollments] = await Promise.all([
+        StudentAccount.find().select('_id name email createdAt').sort({ createdAt: -1 }).lean(),
+        getCoursesWithEnrollmentCounts({}, true),
+        Enrollment.find()
+            .populate('studentAccount', 'name email')
+            .populate('course', 'code title')
+            .sort({ enrolledAt: -1 })
+            .lean()
+    ]);
+
+    return res.render('AdminDashboard.ejs', {
+        accounts: accounts.map((account) => ({
+            ...account,
+            role: getConfiguredRole(account._id)
+        })),
+        courses,
+        enrollments,
+        notice: getNotice(req)
+    });
+});
+
+function getCourseInput(body, user) {
+    const text = (field) => typeof body[field] === 'string' ? body[field].trim() : '';
+    const capacityValue = text('capacity');
+    const capacity = /^\d+$/.test(capacityValue) ? Number(capacityValue) : NaN;
+    const course = {
+        code: text('code').toUpperCase(),
+        title: text('title'),
+        category: text('category'),
+        instructor: user.role === 'admin' ? text('instructor') : user.name,
+        description: text('description'),
+        duration: text('duration'),
+        capacity
+    };
+
+    if (!course.code || course.code.length > 32 ||
+        !course.title || course.title.length > 120 ||
+        !course.category || course.category.length > 60 ||
+        !course.instructor || course.instructor.length > 80 ||
+        !course.description || course.description.length > 500 ||
+        !course.duration || course.duration.length > 40 ||
+        !Number.isSafeInteger(course.capacity) || course.capacity < 1) {
+        return { course, error: 'Complete every field with valid values. Capacity must be a positive whole number.' };
+    }
+
+    return { course, error: null };
+}
+
+function courseDashboardPath(user) {
+    return user.role === 'admin' ? '/admin' : '/teacher';
+}
+
+async function findManageableCourse(courseId, user) {
+    if (!mongoose.isValidObjectId(courseId)) {
+        return null;
+    }
+
+    const filter = { _id: courseId };
+    if (user.role !== 'admin') {
+        filter.createdBy = user._id;
+    }
+    return Course.findOne(filter);
+}
+
+app.get('/manage/courses/new', requireAuth, requireRole('teacher', 'admin'), (req, res) => {
+    return res.render('CourseForm.ejs', {
+        course: { capacity: 30 },
+        error: '',
+        returnPath: courseDashboardPath(req.user)
+    });
+});
+
+app.post('/manage/courses', requireAuth, requireRole('teacher', 'admin'), requireCsrf, async (req, res) => {
+    const { course, error } = getCourseInput(req.body, req.user);
+    const returnPath = courseDashboardPath(req.user);
+    if (error) {
+        return res.status(400).render('CourseForm.ejs', { course, error, returnPath });
+    }
+
+    try {
+        await Course.create({ ...course, createdBy: req.user._id });
+    } catch (createError) {
+        if (createError.code === 11000) {
+            return res.status(409).render('CourseForm.ejs', {
+                course,
+                error: 'A course with that code already exists. Choose a unique course code.',
+                returnPath
+            });
+        }
+        throw createError;
+    }
+
+    return res.redirect(`${returnPath}?status=courseCreated`);
+});
+
+app.get('/manage/courses/:courseId/edit', requireAuth, requireRole('teacher', 'admin'), async (req, res) => {
+    const course = await findManageableCourse(req.params.courseId, req.user);
+    if (!course) {
+        return res.status(404).render('NotFound.ejs');
+    }
+
+    return res.render('CourseForm.ejs', {
+        course,
+        error: '',
+        returnPath: courseDashboardPath(req.user)
+    });
+});
+
+app.post('/manage/courses/:courseId', requireAuth, requireRole('teacher', 'admin'), requireCsrf, async (req, res) => {
+    const existingCourse = await findManageableCourse(req.params.courseId, req.user);
+    if (!existingCourse) {
+        return res.status(404).render('NotFound.ejs');
+    }
+
+    const { course, error } = getCourseInput(req.body, req.user);
+    const returnPath = courseDashboardPath(req.user);
+    course._id = existingCourse._id;
+    course.isActive = existingCourse.isActive;
+    if (error) {
+        return res.status(400).render('CourseForm.ejs', { course, error, returnPath });
+    }
+
+    const enrollmentCount = await Enrollment.countDocuments({ course: existingCourse._id });
+    if (course.capacity < enrollmentCount) {
+        return res.status(400).render('CourseForm.ejs', {
+            course,
+            error: `Capacity cannot be lower than the ${enrollmentCount} existing enrollments.`,
+            returnPath
+        });
+    }
+
+    try {
+        const courseFields = { ...course };
+        delete courseFields._id;
+        await Course.updateOne(
+            { _id: existingCourse._id },
+            { $set: courseFields },
+            { runValidators: true }
+        );
+    } catch (updateError) {
+        if (updateError.code === 11000) {
+            return res.status(409).render('CourseForm.ejs', {
+                course,
+                error: 'A course with that code already exists. Choose a unique course code.',
+                returnPath
+            });
+        }
+        throw updateError;
+    }
+
+    return res.redirect(`${returnPath}?status=courseUpdated`);
+});
+
+app.post('/manage/courses/:courseId/status', requireAuth, requireRole('teacher', 'admin'), requireCsrf, async (req, res) => {
+    if (req.body.isActive !== 'true' && req.body.isActive !== 'false') {
+        return res.status(400).send('Choose a valid course status.');
+    }
+
+    const course = await findManageableCourse(req.params.courseId, req.user);
+    if (!course) {
+        return res.status(404).render('NotFound.ejs');
+    }
+
+    course.isActive = req.body.isActive === 'true';
+    await course.save();
+    return res.redirect(`${courseDashboardPath(req.user)}?status=courseStatusUpdated`);
 });
 
 app.post('/enroll', requireAuth, requireCsrf, async (req, res) => {

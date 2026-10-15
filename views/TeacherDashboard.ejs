@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Manage your CourseHub courses and review learning activity.">
+    <title>CourseHub | Teaching dashboard</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <%- include('./components/header') %>
+    <main class="dashboard-shell">
+        <section class="dashboard-heading">
+            <div>
+                <p class="eyebrow">Teacher workspace</p>
+                <h1>Teaching dashboard</h1>
+                <p>Welcome, <%= currentUser.name %>. Manage your courses and keep an eye on learning across CourseHub.</p>
+            </div>
+            <a class="enroll-button dashboard-action" href="/manage/courses/new">Add a course <span aria-hidden="true">+</span></a>
+        </section>
+
+        <% if (notice) { %>
+            <div class="notice <%= notice.type %>" role="status"><%= notice.message %></div>
+        <% } %>
+
+        <section class="dashboard-stats" aria-label="Overall CourseHub overview">
+            <article class="dashboard-stat"><span>All courses</span><strong><%= overview.courseCount %></strong></article>
+            <article class="dashboard-stat"><span>Published courses</span><strong><%= overview.activeCourseCount %></strong></article>
+            <article class="dashboard-stat"><span>Total enrollments</span><strong><%= overview.enrollmentCount %></strong></article>
+            <article class="dashboard-stat"><span>Student accounts</span><strong><%= overview.studentCount %></strong></article>
+        </section>
+
+        <section class="dashboard-panel" aria-labelledby="teacher-courses-title">
+            <div class="dashboard-panel-heading">
+                <div>
+                    <p class="eyebrow">Your catalog</p>
+                    <h2 id="teacher-courses-title">Courses you manage</h2>
+                </div>
+                <span><%= courses.length %> total</span>
+            </div>
+            <% if (courses.length === 0) { %>
+                <div class="dashboard-empty">
+                    <p>You have not added a course yet.</p>
+                    <a href="/manage/courses/new">Create your first course</a>
+                </div>
+            <% } else { %>
+                <div class="dashboard-table-wrap">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr><th>Course</th><th>Category</th><th>Enrolled</th><th>Status</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody>
+                            <% courses.forEach((course) => { %>
+                                <tr>
+                                    <td><strong><%= course.title %></strong><span class="table-secondary"><%= course.code %></span></td>
+                                    <td><%= course.category %></td>
+                                    <td><%= course.enrollmentCount %> / <%= course.capacity %></td>
+                                    <td><span class="status-badge <%= course.isActive ? 'status-published' : 'status-archived' %>"><%= course.isActive ? 'Published' : 'Archived' %></span></td>
+                                    <td>
+                                        <div class="dashboard-row-actions">
+                                            <a href="/manage/courses/<%= course._id %>/edit">Edit</a>
+                                            <form action="/manage/courses/<%= course._id %>/status" method="POST">
+                                                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                                                <input type="hidden" name="isActive" value="<%= course.isActive ? 'false' : 'true' %>">
+                                                <button type="submit"><%= course.isActive ? 'Archive' : 'Publish' %></button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <% }); %>
+                        </tbody>
+                    </table>
+                </div>
+            <% } %>
+        </section>
+    </main>
+    <%- include('./components/footer') %>
+</body>
+</html>

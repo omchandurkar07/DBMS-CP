@@ -52,7 +52,11 @@ a {
     border-radius: 10px;
     color: #fff;
     background: #5c65dc;
-    font-size: 0.92rem;
+}
+
+.brand-logo {
+    width: 28px;
+    height: 28px;
 }
 
 .main-nav {
@@ -2260,6 +2264,324 @@ a:focus-visible {
     margin: 0;
     color: #777067;
     font-size: 0.74rem;
+}
+
+.dashboard-shell,
+.course-editor-shell {
+    width: min(1120px, 88%);
+    margin: 0 auto;
+    padding: 48px 0 76px;
+}
+
+.dashboard-heading,
+.dashboard-panel-heading,
+.course-editor-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.dashboard-heading {
+    margin-bottom: 28px;
+}
+
+.dashboard-heading h1,
+.course-editor h1 {
+    margin: 0;
+    color: #3e3028;
+    font-size: clamp(2rem, 4vw, 2.7rem);
+    letter-spacing: -0.045em;
+}
+
+.dashboard-heading p:not(.eyebrow),
+.course-editor > .section-copy {
+    margin: 10px 0 0;
+    color: #777067;
+    line-height: 1.65;
+}
+
+.dashboard-action {
+    flex: 0 0 auto;
+    text-decoration: none;
+}
+
+.dashboard-stats {
+    margin-bottom: 26px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.dashboard-stat {
+    min-height: 112px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    border: 1px solid #e9dfd1;
+    border-radius: 12px;
+    background: #fffdf8;
+}
+
+.dashboard-stat span {
+    color: #777067;
+    font-size: 0.8rem;
+    font-weight: 650;
+}
+
+.dashboard-stat strong {
+    color: #3e3028;
+    font-size: 1.8rem;
+    line-height: 1;
+}
+
+.dashboard-panel,
+.course-editor {
+    margin-top: 22px;
+    padding: 24px;
+    border: 1px solid #e9dfd1;
+    border-radius: 14px;
+    background: #fffdf8;
+    box-shadow: 0 8px 26px rgb(66 46 32 / 5%);
+}
+
+.dashboard-panel-heading {
+    margin-bottom: 18px;
+}
+
+.dashboard-panel-heading .eyebrow {
+    margin-bottom: 5px;
+}
+
+.dashboard-panel-heading h2 {
+    margin: 0;
+    color: #3e3028;
+    font-size: 1.35rem;
+}
+
+.dashboard-panel-heading > span {
+    color: #777067;
+    font-size: 0.82rem;
+}
+
+.dashboard-table-wrap {
+    overflow-x: auto;
+}
+
+.dashboard-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.dashboard-table th,
+.dashboard-table td {
+    padding: 13px 12px;
+    border-bottom: 1px solid #eee7dc;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.dashboard-table th {
+    color: #777067;
+    font-size: 0.72rem;
+    font-weight: 750;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.dashboard-table td {
+    color: #59493c;
+    font-size: 0.82rem;
+}
+
+.dashboard-table td:first-child {
+    min-width: 170px;
+    white-space: normal;
+}
+
+.dashboard-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.table-secondary {
+    margin-top: 4px;
+    display: block;
+    color: #8a8074;
+    font-size: 0.75rem;
+}
+
+.status-badge {
+    padding: 5px 9px;
+    display: inline-block;
+    border-radius: 99px;
+    color: #665445;
+    background: #f4eee5;
+    font-size: 0.72rem;
+    font-weight: 750;
+    text-transform: capitalize;
+}
+
+.status-published {
+    color: #33604b;
+    background: #e8f2e9;
+}
+
+.status-archived {
+    color: #785c42;
+    background: #f4eee5;
+}
+
+.dashboard-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.dashboard-row-actions a,
+.dashboard-row-actions button,
+.dashboard-empty a {
+    padding: 0;
+    border: 0;
+    color: #a6532f;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 750;
+    text-decoration: none;
+}
+
+.dashboard-row-actions a:hover,
+.dashboard-row-actions button:hover,
+.dashboard-empty a:hover {
+    text-decoration: underline;
+}
+
+.dashboard-empty {
+    margin: 0;
+    padding: 18px 0 8px;
+    color: #777067;
+    font-size: 0.88rem;
+}
+
+.course-editor-shell > .back-link {
+    display: inline-block;
+    margin-bottom: 18px;
+    text-decoration: none;
+}
+
+.course-editor {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: clamp(22px, 5vw, 38px);
+}
+
+.course-editor h1 {
+    font-size: clamp(1.8rem, 4vw, 2.3rem);
+}
+
+.course-editor-form {
+    margin-top: 24px;
+}
+
+.course-editor-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 17px;
+}
+
+.course-editor-field {
+    display: grid;
+    align-content: start;
+    gap: 7px;
+}
+
+.course-editor-field label,
+.field-label {
+    color: #59493c;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.course-editor-field input,
+.course-editor-field textarea {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1px solid #e3d9ca;
+    border-radius: 7px;
+    outline: none;
+    color: #40352c;
+    background: #fffefa;
+    font: inherit;
+    font-size: 0.85rem;
+}
+
+.course-editor-field textarea {
+    min-height: 120px;
+    resize: vertical;
+}
+
+.course-editor-field input:focus,
+.course-editor-field textarea:focus {
+    border-color: #c0804c;
+    box-shadow: 0 0 0 3px rgb(166 83 47 / 13%);
+}
+
+.course-editor-description {
+    grid-column: 1 / -1;
+}
+
+.course-editor-instructor {
+    min-height: 44px;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid #eee7dc;
+    border-radius: 7px;
+    color: #777067;
+    background: #f8f4ec;
+    font-size: 0.85rem;
+}
+
+.course-editor-actions {
+    margin-top: 22px;
+}
+
+.course-editor-actions .back-link {
+    text-decoration: none;
+}
+
+@media (max-width: 760px) {
+    .dashboard-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 560px) {
+    .dashboard-shell,
+    .course-editor-shell {
+        width: 90%;
+        padding-top: 32px;
+    }
+
+    .dashboard-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .dashboard-panel {
+        padding: 18px;
+    }
+
+    .course-editor-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .course-editor-description {
+        grid-column: auto;
+    }
 }
 
 .auth-error {

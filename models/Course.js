@@ -6,6 +6,7 @@ const courseSchema = new mongoose.Schema({
         required: true,
         trim: true,
         uppercase: true,
+        maxlength: 32,
         unique: true
     },
     title: {
@@ -42,6 +43,11 @@ const courseSchema = new mongoose.Schema({
         type: Number,
         required: true,
         min: 1
+    },
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'StudentAccount',
+        index: true
     },
     isActive: {
         type: Boolean,

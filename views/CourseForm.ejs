@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="<%= course._id ? 'Edit a CourseHub course.' : 'Add a new CourseHub course.' %>">
+    <title>CourseHub | <%= course._id ? 'Edit course' : 'Add course' %></title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <%- include('./components/header') %>
+    <main class="course-editor-shell">
+        <a class="back-link" href="<%= returnPath %>">← Back to dashboard</a>
+        <section class="course-editor">
+            <p class="eyebrow"><%= currentUser.role === 'admin' ? 'Administration' : 'Teacher workspace' %></p>
+            <h1><%= course._id ? 'Edit course' : 'Add a course' %></h1>
+            <p class="section-copy">Provide the course details shown in the CourseHub catalog.</p>
+
+            <% if (error) { %>
+                <p class="auth-error" role="alert"><%= error %></p>
+            <% } %>
+
+            <form class="course-editor-form" action="<%= course._id ? `/manage/courses/${course._id}` : '/manage/courses' %>" method="POST">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <div class="course-editor-grid">
+                    <div class="course-editor-field">
+                        <label for="course-code">Course code</label>
+                        <input id="course-code" name="code" type="text" maxlength="32" value="<%= course.code || '' %>" required>
+                    </div>
+                    <div class="course-editor-field">
+                        <label for="course-title">Course title</label>
+                        <input id="course-title" name="title" type="text" maxlength="120" value="<%= course.title || '' %>" required>
+                    </div>
+                    <div class="course-editor-field">
+                        <label for="course-category">Category</label>
+                        <input id="course-category" name="category" type="text" maxlength="60" value="<%= course.category || '' %>" required>
+                    </div>
+                    <% if (currentUser.role === 'admin') { %>
+                        <div class="course-editor-field">
+                            <label for="course-instructor">Instructor</label>
+                            <input id="course-instructor" name="instructor" type="text" maxlength="80" value="<%= course.instructor || '' %>" required>
+                        </div>
+                    <% } else { %>
+                        <div class="course-editor-field">
+                            <span class="field-label">Instructor</span>
+                            <p class="course-editor-instructor"><%= currentUser.name %></p>
+                        </div>
+                    <% } %>
+                    <div class="course-editor-field">
+                        <label for="course-duration">Duration</label>
+                        <input id="course-duration" name="duration" type="text" maxlength="40" value="<%= course.duration || '' %>" placeholder="e.g. 8 weeks" required>
+                    </div>
+                    <div class="course-editor-field">
+                        <label for="course-capacity">Capacity</label>
+                        <input id="course-capacity" name="capacity" type="number" min="1" step="1" value="<%= course.capacity ?? '' %>" required>
+                    </div>
+                    <div class="course-editor-field course-editor-description">
+                        <label for="course-description">Description</label>
+                        <textarea id="course-description" name="description" rows="5" maxlength="500" required><%= course.description || '' %></textarea>
+                    </div>
+                </div>
+                <div class="course-editor-actions">
+                    <a class="back-link" href="<%= returnPath %>">Cancel</a>
+                    <button class="enroll-button" type="submit"><%= course._id ? 'Save changes' : 'Create course' %> <span aria-hidden="true">→</span></button>
+                </div>
+            </form>
+        </section>
+    </main>
+    <%- include('./components/footer') %>
+</body>
+</html>
