@@ -43,6 +43,13 @@ create an account, enroll, and keep track of their learning.
    PORT=8080
    ADMIN_ACCOUNT_IDS=
    TEACHER_ACCOUNT_IDS=
+   APP_BASE_URL=http://localhost:8080
+   SMTP_HOST=
+   SMTP_PORT=587
+   SMTP_SECURE=false
+   SMTP_USER=
+   SMTP_PASS=
+   SMTP_FROM=
    ```
 
    Replace the URI with your database connection string if you use MongoDB
@@ -56,7 +63,12 @@ create an account, enroll, and keep track of their learning.
    `db.studentaccounts.findOne({ email: "admin@example.com" }, { _id: 1 })`.
    Separate multiple IDs with commas. Admin takes precedence if an ID appears
    in both lists. The normal `/signup` route creates student accounts. Restart
-   the app after changing role configuration.
+   the app after changing role configuration. Password reset requires SMTP
+   settings and the canonical app URL. For production, set `APP_BASE_URL` to
+   the HTTPS site origin, `SMTP_HOST` and `SMTP_PORT` to your mail provider,
+   `SMTP_SECURE=true` when using implicit TLS (commonly port 465), optional
+   `SMTP_USER`/`SMTP_PASS` credentials, and a verified `SMTP_FROM` sender.
+   Do not commit SMTP credentials to source control.
 
 3. Start the application:
 
@@ -93,6 +105,8 @@ courses if they are not already present. Existing course records are retained.
 | `POST /learn/:courseId/:lessonId/complete` | Mark an enrolled lesson complete (CSRF protected) |
 | `GET /signup` and `POST /signup` | Create an account |
 | `GET /login` and `POST /login` | Sign in |
+| `GET /forgot-password` and `POST /forgot-password` | Request an email password-reset link |
+| `GET /reset-password` and `POST /reset-password` | Validate a reset link and choose a new password |
 | `GET /teacher/signup` and `POST /teacher/signup` | Create a teacher account |
 | `GET /teacher/login` and `POST /teacher/login` | Sign in as a teacher |
 | `POST /logout` | Sign out |
@@ -127,6 +141,12 @@ is recorded once per student/course/lesson when completion is submitted;
 weekly minutes use the lesson's configured duration, not measured time-on-page.
 Activity streaks and weekly summaries therefore begin accumulating from lesson
 completions recorded after this feature is deployed. Activity dates use UTC.
+
+Password-reset links are generated from `APP_BASE_URL`, expire after 30 minutes,
+and contain a random token whose hash alone is stored in MongoDB. Requests do
+not disclose whether an email address has an account. Reset requests and
+submissions are rate-limited per server process; use a shared rate-limit store
+if deploying multiple application instances.
 
 The catalog accepts `q`, `category`, `availability=available`, `sort=title|newest|popular`,
 and `page` query parameters and shows nine courses per page. Curricula support

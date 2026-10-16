@@ -49,6 +49,9 @@
                 </button>
             </form>
 
+            <% if (mode === 'login') { %>
+                <p class="auth-switch"><a href="/forgot-password">Forgot your password?</a></p>
+            <% } %>
             <p class="auth-switch">
                 <%= mode === 'signup' ? 'Already have an account?' : (authRole === 'teacher' ? 'Need a teacher account?' : 'New to CourseHub?') %>
                 <a href="/<%= authRole === 'teacher' ? 'teacher/' : '' %><%= mode === 'signup' ? 'login' : 'signup' %>?next=<%= encodeURIComponent(nextPath) %>">

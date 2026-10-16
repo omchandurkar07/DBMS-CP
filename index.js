@@ -1,11 +1,14 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const multer = require('multer');
+const nodemailer = require('nodemailer');
 const path = require('path');
 const { promisify } = require('util');
 const { createHash, randomBytes, scrypt, timingSafeEqual } = require('crypto');
+const { rateLimit } = require('express-rate-limit');
 const Course = require('./models/Course');
 const Enrollment = require('./models/Enrollment');
+const PasswordResetToken = require('./models/PasswordResetToken');
 const StudentAccount = require('./models/StudentAccount');
 const StudentLearningActivity = require('./models/StudentLearningActivity');
 const StudentSavedCourse = require('./models/StudentSavedCourse');
@@ -20,6 +23,32 @@ const sessionCookieName = 'coursehub_session';
 const csrfCookieName = 'coursehub_csrf';
 const sessionLifetimeMs = 7 * 24 * 60 * 60 * 1000;
 const scryptAsync = promisify(scrypt);
+const passwordResetTokenLifetimeMs = 30 * 60 * 1000;
+const passwordResetRequestLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 5,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    handler(req, res) {
+        return res.status(429).render('PasswordResetRequest.ejs', {
+            notice: null,
+            error: 'Too many reset requests. Please wait 15 minutes before trying again.'
+        });
+    }
+});
+const passwordResetSubmitLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    handler(req, res) {
+        res.set('Cache-Control', 'no-store');
+        return res.status(429).render('PasswordReset.ejs', {
+            resetToken: '',
+            error: 'Too many attempts. Please wait 15 minutes and request a new reset link.'
+        });
+    }
+});
 const coursePhotoUpload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 700, fieldSize: 22000, parts: 710 },
@@ -53,6 +82,8 @@ const notices = {
     full: { type: 'error', message: 'That course is full. Please choose another course.' },
     signedUp: { type: 'success', message: 'Your account is ready. You are now signed in.' },
     signedOut: { type: 'success', message: 'You have been signed out.' },
+    passwordResetRequested: { type: 'success', message: 'If an account exists for that email, password reset instructions have been sent.' },
+    passwordResetComplete: { type: 'success', message: 'Your password has been updated. Sign in with your new password.' },
     profileUpdated: { type: 'success', message: 'Your profile has been updated.' },
     profileInvalid: { type: 'error', message: 'Enter a name between 1 and 80 characters.' },
     profileGoalUpdated: { type: 'success', message: 'Your weekly learning goal has been updated.' },
@@ -124,6 +155,50 @@ function csrfCookieOptions(maxAge) {
 
 function hashToken(token) {
     return createHash('sha256').update(token).digest('hex');
+}
+
+function getPasswordResetMailer() {
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = Number(process.env.SMTP_PORT || 587);
+    const smtpFrom = process.env.SMTP_FROM;
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    const appBaseUrl = process.env.APP_BASE_URL;
+    if (!smtpHost || !smtpFrom || !appBaseUrl || !Number.isInteger(smtpPort) ||
+        smtpPort < 1 || smtpPort > 65535 ||
+        Boolean(smtpUser) !== Boolean(smtpPass) ||
+        (process.env.NODE_ENV === 'production' && !appBaseUrl.startsWith('https://'))) {
+        return null;
+    }
+
+    let parsedBaseUrl;
+    try {
+        parsedBaseUrl = new URL(appBaseUrl);
+    } catch {
+        return null;
+    }
+    if (!['http:', 'https:'].includes(parsedBaseUrl.protocol) ||
+        parsedBaseUrl.username || parsedBaseUrl.password) {
+        return null;
+    }
+    parsedBaseUrl.pathname = parsedBaseUrl.pathname.replace(/\/+$/, '');
+    parsedBaseUrl.search = '';
+    parsedBaseUrl.hash = '';
+    const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
+
+    return {
+        transporter: nodemailer.createTransport({
+            host: smtpHost,
+            port: smtpPort,
+            secure: smtpSecure,
+            requireTLS: !smtpSecure,
+            auth: smtpUser
+                ? { user: smtpUser, pass: smtpPass }
+                : undefined
+        }),
+        from: smtpFrom,
+        baseUrl: parsedBaseUrl.toString().replace(/\/$/, '')
+    };
 }
 
 function safeNextPath(value) {
@@ -383,6 +458,151 @@ app.get('/login', (req, res) => renderAuthPage(req, res, 'login', 'student'));
 app.get('/teacher/login', (req, res) => renderAuthPage(req, res, 'login', 'teacher'));
 app.post('/login', requireCsrf, createLoginHandler('student'));
 app.post('/teacher/login', requireCsrf, createLoginHandler('teacher'));
+
+app.get('/forgot-password', (req, res) => {
+    return res.render('PasswordResetRequest.ejs', {
+        error: '',
+        notice: getNotice(req)
+    });
+});
+
+app.post('/forgot-password', passwordResetRequestLimiter, requireCsrf, async (req, res) => {
+    const email = typeof req.body.email === 'string'
+        ? req.body.email.trim().toLowerCase()
+        : '';
+    if (!emailPattern.test(email) || email.length > 254) {
+        return res.status(400).render('PasswordResetRequest.ejs', {
+            error: 'Enter a valid email address.',
+            notice: null
+        });
+    }
+
+    const mailer = getPasswordResetMailer();
+    if (!mailer) {
+        return res.status(503).render('PasswordResetRequest.ejs', {
+            error: 'Password reset email is not configured. Please contact the site administrator.',
+            notice: null
+        });
+    }
+
+    const account = await StudentAccount.findOne({ email }).select('_id email');
+    if (account) {
+        const resetToken = randomBytes(32).toString('base64url');
+        const tokenHash = hashToken(resetToken);
+        await PasswordResetToken.findOneAndUpdate(
+            { account: account._id },
+            {
+                $set: {
+                    tokenHash,
+                    expiresAt: new Date(Date.now() + passwordResetTokenLifetimeMs)
+                }
+            },
+            { upsert: true, new: true, runValidators: true }
+        );
+
+        const resetUrl = new URL('/reset-password', `${mailer.baseUrl}/`);
+        resetUrl.searchParams.set('token', resetToken);
+        try {
+            await mailer.transporter.sendMail({
+                from: mailer.from,
+                to: account.email,
+                subject: 'Reset your CourseHub password',
+                text: [
+                    'A password reset was requested for your CourseHub account.',
+                    '',
+                    `Use this link within 30 minutes to choose a new password: ${resetUrl.toString()}`,
+                    '',
+                    'If you did not request this, you can ignore this email.'
+                ].join('\n')
+            });
+        } catch (error) {
+            await PasswordResetToken.deleteOne({ account: account._id, tokenHash });
+            console.error('Password reset email delivery failed:', error.message);
+            return res.status(503).render('PasswordResetRequest.ejs', {
+                error: 'We could not send a reset email right now. Please try again later.',
+                notice: null
+            });
+        }
+    }
+
+    return res.redirect('/forgot-password?status=passwordResetRequested');
+});
+
+app.get('/reset-password', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.set('Referrer-Policy', 'no-referrer');
+    const token = typeof req.query.token === 'string' ? req.query.token : '';
+    const validTokenFormat = /^[A-Za-z0-9_-]{43}$/.test(token);
+    const tokenRecord = validTokenFormat
+        ? await PasswordResetToken.findOne({
+            tokenHash: hashToken(token),
+            expiresAt: { $gt: new Date() }
+        }).select('_id')
+        : null;
+    return res.status(tokenRecord ? 200 : 400).render('PasswordReset.ejs', {
+        resetToken: tokenRecord ? token : '',
+        error: tokenRecord ? '' : 'This password reset link is invalid or has expired. Request a new one.'
+    });
+});
+
+app.post('/reset-password', passwordResetSubmitLimiter, requireCsrf, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const resetToken = typeof req.body.resetToken === 'string' ? req.body.resetToken : '';
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
+    if (!/^[A-Za-z0-9_-]{43}$/.test(resetToken)) {
+        return res.status(400).render('PasswordReset.ejs', {
+            resetToken: '',
+            error: 'This password reset link is invalid or has expired. Request a new one.'
+        });
+    }
+    if (password.length < 8 || password.length > 128) {
+        return res.status(400).render('PasswordReset.ejs', {
+            resetToken,
+            error: 'Choose a password between 8 and 128 characters.'
+        });
+    }
+
+    const tokenHash = hashToken(resetToken);
+    const existingToken = await PasswordResetToken.findOne({
+        tokenHash,
+        expiresAt: { $gt: new Date() }
+    }).select('account');
+    if (!existingToken) {
+        return res.status(400).render('PasswordReset.ejs', {
+            resetToken: '',
+            error: 'This password reset link is invalid or has expired. Request a new one.'
+        });
+    }
+
+    const passwordSalt = randomBytes(16).toString('hex');
+    const passwordHash = (await scryptAsync(password, passwordSalt, 64)).toString('hex');
+    const consumedToken = await PasswordResetToken.findOneAndDelete({
+        _id: existingToken._id,
+        expiresAt: { $gt: new Date() }
+    });
+    if (!consumedToken) {
+        return res.status(400).render('PasswordReset.ejs', {
+            resetToken: '',
+            error: 'This password reset link has already been used or has expired. Request a new one.'
+        });
+    }
+
+    const accountUpdate = await StudentAccount.updateOne(
+        { _id: consumedToken.account },
+        { $set: { passwordSalt, passwordHash } }
+    );
+    if (!accountUpdate.matchedCount) {
+        return res.status(400).render('PasswordReset.ejs', {
+            resetToken: '',
+            error: 'This password reset link is invalid. Request a new one.'
+        });
+    }
+    await Promise.all([
+        StudentSession.deleteMany({ account: consumedToken.account }),
+        PasswordResetToken.deleteMany({ account: consumedToken.account })
+    ]);
+    return res.redirect('/login?status=passwordResetComplete');
+});
 
 app.get('/dashboard', requireAuth, (req, res) => {
     if (req.user.role === 'admin') {
@@ -1537,7 +1757,8 @@ async function startServer() {
         StudentAccount.init(),
         StudentLearningActivity.init(),
         StudentSavedCourse.init(),
-        StudentSession.init()
+        StudentSession.init(),
+        PasswordResetToken.init()
     ]);
     await seedCourses();
     console.log('MongoDB connected');
