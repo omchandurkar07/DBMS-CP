@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Your saved CourseHub courses.">
+    <title>CourseHub | Saved courses</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <%- include('./components/header') %>
+    <main>
+        <section class="page-banner">
+            <p class="eyebrow">Your learning space</p>
+            <h1>Saved courses</h1>
+            <p>Keep courses you want to explore together in your personal wishlist.</p>
+        </section>
+        <% if (notice) { %>
+            <div class="notice <%= notice.type %>" role="status"><%= notice.message %></div>
+        <% } %>
+        <section class="content-section saved-courses-section" aria-labelledby="saved-courses-title">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Your wishlist</p>
+                    <h2 id="saved-courses-title"><%= courses.length %> saved <%= courses.length === 1 ? 'course' : 'courses' %></h2>
+                </div>
+                <a class="back-link" href="/my-learning">← Student dashboard</a>
+            </div>
+            <% if (courses.length === 0) { %>
+                <div class="empty-state">
+                    <h3>Your wishlist is empty</h3>
+                    <p>Save a course from the catalog and it will be available here on your account.</p>
+                    <a class="course-link dashboard-browse-link" href="/courses">Browse courses <span aria-hidden="true">→</span></a>
+                </div>
+            <% } else { %>
+                <div class="student-course-grid">
+                    <% courses.forEach((course) => { %>
+                        <article class="student-course-card saved-course-card">
+                            <%- include('./components/course-photo', { course }) %>
+                            <p class="eyebrow"><%= course.isActive ? course.category : 'Archived course' %></p>
+                            <h3><%= course.title %></h3>
+                            <p class="student-course-meta"><%= course.instructor %> · <%= course.duration %></p>
+                            <p class="course-description"><%= course.description %></p>
+                            <div class="saved-course-actions">
+                                <% if (course.isActive) { %>
+                                    <a class="course-link" href="/courses/<%= course._id %>">View course <span aria-hidden="true">→</span></a>
+                                <% } else { %>
+                                    <span class="saved-course-archived">No longer open for enrollment</span>
+                                <% } %>
+                                <form action="/saved-courses/<%= course._id %>" method="POST">
+                                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                                    <input type="hidden" name="saved" value="false">
+                                    <button class="curriculum-remove-button" type="submit">Remove from saved</button>
+                                </form>
+                            </div>
+                        </article>
+                    <% }); %>
+                </div>
+            <% } %>
+        </section>
+    </main>
+    <%- include('./components/footer') %>
+</body>
+</html>

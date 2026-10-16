@@ -9,6 +9,7 @@
 </head>
 <body>
     <%- include('./components/header') %>
+    <% const formModules = course.modules && course.modules.length ? course.modules : []; %>
     <main class="course-editor-shell">
         <a class="back-link" href="<%= returnPath %>">← Back to dashboard</a>
         <section class="course-editor">
@@ -22,6 +23,7 @@
 
             <form class="course-editor-form" action="<%= course._id ? `/manage/courses/${course._id}` : '/manage/courses' %>" method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <input type="hidden" name="curriculumPresent" value="true">
                 <div class="course-editor-grid">
                     <div class="course-editor-field">
                         <label for="course-title">Course title</label>
@@ -43,8 +45,8 @@
                         </div>
                     <% } %>
                     <div class="course-editor-field">
-                        <label for="course-duration">Duration</label>
-                        <input id="course-duration" name="duration" type="text" maxlength="40" value="<%= course.duration || '' %>" placeholder="e.g. 8 weeks" required>
+                        <span class="field-label">Course duration</span>
+                        <p class="course-editor-instructor" data-duration-summary><%= course.duration || '0 minutes' %></p>
                     </div>
                     <div class="course-editor-field">
                         <label for="course-capacity">Capacity</label>
@@ -67,6 +69,90 @@
                             <%= course.photoContentType ? '' : 'required' %>>
                         <p class="password-hint">JPEG, PNG, or WebP; maximum file size 5 MB.</p>
                     </div>
+                    <section class="course-curriculum-editor" data-course-curriculum aria-labelledby="curriculum-title">
+                        <div class="curriculum-editor-heading">
+                            <div>
+                                <h2 id="curriculum-title">Build the curriculum</h2>
+                                <span class="field-label">Course curriculum</span>
+                                <p class="password-hint">Organize lessons into modules. Add optional reading content or an HTTPS video URL.</p>
+                            </div>
+                            <button class="curriculum-add-button" type="button" data-add-module>Add module</button>
+                        </div>
+                        <div class="curriculum-module-list" data-module-list>
+                            <% formModules.forEach((module, moduleIndex) => { %>
+                                <section class="curriculum-module" data-curriculum-module>
+                                    <input type="hidden" data-curriculum-field data-field="_id" name="modules[<%= moduleIndex %>][_id]" value="<%= module._id || '' %>">
+                                    <header class="curriculum-module-heading">
+                                        <h3 data-module-heading>Module <%= moduleIndex + 1 %></h3>
+                                        <div class="curriculum-item-actions">
+                                            <button class="curriculum-move-button" type="button" data-move-up aria-label="Move module earlier">↑</button>
+                                            <button class="curriculum-move-button" type="button" data-move-down aria-label="Move module later">↓</button>
+                                            <button class="curriculum-remove-button" type="button" data-remove-module>Remove module</button>
+                                        </div>
+                                    </header>
+                                    <label data-label-for="title" for="module-<%= moduleIndex %>-title">Module title</label>
+                                    <input id="module-<%= moduleIndex %>-title" data-curriculum-field data-field="title"
+                                        name="modules[<%= moduleIndex %>][title]" value="<%= module.title || '' %>" maxlength="120" required>
+                                    <div class="curriculum-lessons" data-lesson-list>
+                                        <% (module.lessons || []).forEach((lesson, lessonIndex) => { %>
+                                            <article class="curriculum-lesson" data-curriculum-lesson>
+                                                <input type="hidden" data-curriculum-field data-field="_id"
+                                                    name="modules[<%= moduleIndex %>][lessons][<%= lessonIndex %>][_id]" value="<%= lesson._id || '' %>">
+                                                <header class="curriculum-lesson-heading">
+                                                    <h4>Lesson <%= lessonIndex + 1 %></h4>
+                                                    <div class="curriculum-item-actions">
+                                                        <button class="curriculum-move-button" type="button" data-move-up aria-label="Move lesson earlier">↑</button>
+                                                        <button class="curriculum-move-button" type="button" data-move-down aria-label="Move lesson later">↓</button>
+                                                        <button class="curriculum-remove-button" type="button" data-remove-lesson>Remove lesson</button>
+                                                    </div>
+                                                </header>
+                                                <div class="curriculum-lesson-grid">
+                                                    <div class="course-editor-field">
+                                                        <label for="module-<%= moduleIndex %>-lesson-<%= lessonIndex %>-title">Lesson title</label>
+                                                        <input id="module-<%= moduleIndex %>-lesson-<%= lessonIndex %>-title"
+                                                            data-curriculum-field data-field="title"
+                                                            name="modules[<%= moduleIndex %>][lessons][<%= lessonIndex %>][title]"
+                                                            value="<%= lesson.title || '' %>" maxlength="120" required>
+                                                    </div>
+                                                    <div class="course-editor-field">
+                                                        <label for="module-<%= moduleIndex %>-lesson-<%= lessonIndex %>-duration">Duration (minutes)</label>
+                                                        <input id="module-<%= moduleIndex %>-lesson-<%= lessonIndex %>-duration"
+                                                            data-curriculum-field data-field="durationMinutes"
+                                                            name="modules[<%= moduleIndex %>][lessons][<%= lessonIndex %>][durationMinutes]"
+                                                            type="number" min="1" max="600" step="1"
+                                                            value="<%= Number.isSafeInteger(lesson.durationMinutes) ? lesson.durationMinutes : '' %>" required>
+                                                    </div>
+                                                    <div class="course-editor-field curriculum-lesson-wide">
+                                                        <label for="module-<%= moduleIndex %>-lesson-<%= lessonIndex %>-summary">Lesson summary</label>
+                                                        <input id="module-<%= moduleIndex %>-lesson-<%= lessonIndex %>-summary"
+                                                            data-curriculum-field data-field="summary"
+                                                            name="modules[<%= moduleIndex %>][lessons][<%= lessonIndex %>][summary]"
+                                                            value="<%= lesson.summary || '' %>" maxlength="500">
+                                                    </div>
+                                                    <div class="course-editor-field curriculum-lesson-wide">
+                                                        <label for="module-<%= moduleIndex %>-lesson-<%= lessonIndex %>-video">Video URL (optional)</label>
+                                                        <input id="module-<%= moduleIndex %>-lesson-<%= lessonIndex %>-video"
+                                                            data-curriculum-field data-field="videoUrl"
+                                                            name="modules[<%= moduleIndex %>][lessons][<%= lessonIndex %>][videoUrl]"
+                                                            type="url" value="<%= lesson.videoUrl || '' %>" maxlength="500"
+                                                            placeholder="https://example.com/lesson.mp4">
+                                                    </div>
+                                                    <div class="course-editor-field curriculum-lesson-wide">
+                                                        <label for="module-<%= moduleIndex %>-lesson-<%= lessonIndex %>-content">Lesson content</label>
+                                                        <textarea id="module-<%= moduleIndex %>-lesson-<%= lessonIndex %>-content"
+                                                            data-curriculum-field data-field="content"
+                                                            name="modules[<%= moduleIndex %>][lessons][<%= lessonIndex %>][content]"
+                                                            rows="4" maxlength="20000"><%= lesson.content || '' %></textarea>
+                                                    </div>
+                                                </div>
+                                            </article>
+                                        <% }); %>
+                                    </div>
+                                    <button class="curriculum-add-button" type="button" data-add-lesson>Add lesson</button>
+                                </section>
+                            <% }); %>
+                        </div>
+                    </section>
                 </div>
                 <div class="course-editor-actions">
                     <a class="back-link" href="<%= returnPath %>">Cancel</a>
@@ -75,6 +161,58 @@
             </form>
         </section>
     </main>
+    <template data-module-template>
+        <section class="curriculum-module" data-curriculum-module>
+            <input type="hidden" data-curriculum-field data-field="_id">
+            <header class="curriculum-module-heading">
+                <h3 data-module-heading></h3>
+                <div class="curriculum-item-actions">
+                    <button class="curriculum-move-button" type="button" data-move-up aria-label="Move module earlier">↑</button>
+                    <button class="curriculum-move-button" type="button" data-move-down aria-label="Move module later">↓</button>
+                    <button class="curriculum-remove-button" type="button" data-remove-module>Remove module</button>
+                </div>
+            </header>
+            <label data-label-for="title">Module title</label>
+            <input data-curriculum-field data-field="title" maxlength="120" required>
+            <div class="curriculum-lessons" data-lesson-list></div>
+            <button class="curriculum-add-button" type="button" data-add-lesson>Add lesson</button>
+        </section>
+    </template>
+    <template data-lesson-template>
+        <article class="curriculum-lesson" data-curriculum-lesson>
+            <input type="hidden" data-curriculum-field data-field="_id">
+            <header class="curriculum-lesson-heading">
+                <h4></h4>
+                <div class="curriculum-item-actions">
+                    <button class="curriculum-move-button" type="button" data-move-up aria-label="Move lesson earlier">↑</button>
+                    <button class="curriculum-move-button" type="button" data-move-down aria-label="Move lesson later">↓</button>
+                    <button class="curriculum-remove-button" type="button" data-remove-lesson>Remove lesson</button>
+                </div>
+            </header>
+            <div class="curriculum-lesson-grid">
+                <div class="course-editor-field">
+                    <label data-label-for="title">Lesson title</label>
+                    <input data-curriculum-field data-field="title" maxlength="120" required>
+                </div>
+                <div class="course-editor-field">
+                    <label data-label-for="durationMinutes">Duration (minutes)</label>
+                    <input data-curriculum-field data-field="durationMinutes" type="number" min="1" max="600" step="1" value="10" required>
+                </div>
+                <div class="course-editor-field curriculum-lesson-wide">
+                    <label data-label-for="summary">Lesson summary</label>
+                    <input data-curriculum-field data-field="summary" maxlength="500">
+                </div>
+                <div class="course-editor-field curriculum-lesson-wide">
+                    <label data-label-for="videoUrl">Video URL (optional)</label>
+                    <input data-curriculum-field data-field="videoUrl" type="url" maxlength="500" placeholder="https://example.com/lesson.mp4">
+                </div>
+                <div class="course-editor-field curriculum-lesson-wide">
+                    <label data-label-for="content">Lesson content</label>
+                    <textarea data-curriculum-field data-field="content" rows="4" maxlength="20000"></textarea>
+                </div>
+            </div>
+        </article>
+    </template>
     <%- include('./components/footer') %>
     <script src="/app.js" defer></script>
 </body>

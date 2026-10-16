@@ -28,6 +28,12 @@ const studentAccountSchema = new mongoose.Schema({
         enum: ['student', 'teacher'],
         default: 'student',
         required: true
+    },
+    weeklyLearningGoalMinutes: {
+        type: Number,
+        min: 30,
+        max: 1680,
+        default: 300
     }
 }, { timestamps: true });
 

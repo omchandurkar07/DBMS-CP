@@ -28,16 +28,67 @@
                     <div><span>Students enrolled</span><strong><%= course.enrollmentCount %> / <%= course.capacity %></strong></div>
                     <div><span>Availability</span><strong><%= Math.max(course.capacity - course.enrollmentCount, 0) %> places remaining</strong></div>
                 </div>
+                <section class="course-curriculum" aria-labelledby="course-curriculum-title">
+                    <div class="curriculum-heading">
+                        <div>
+                            <p class="eyebrow">Inside the course</p>
+                            <h2 id="course-curriculum-title">Curriculum</h2>
+                        </div>
+                        <% if (learningEnrollment && learningEnrollment.lessonCount > 0) { %>
+                            <span><%= learningEnrollment.completedLessonCount %> of <%= learningEnrollment.lessonCount %> lessons · <%= learningEnrollment.progress %>%</span>
+                        <% } %>
+                    </div>
+                    <% if (course.modules && course.modules.length > 0) { %>
+                        <ol class="course-module-list">
+                            <% course.modules.forEach((module, moduleIndex) => { %>
+                                <li class="course-module">
+                                    <h3><span>Module <%= moduleIndex + 1 %></span><%= module.title %></h3>
+                                    <ol class="course-lesson-list">
+                                        <% module.lessons.forEach((lesson) => { %>
+                                            <li>
+                                                <% if (learningEnrollment) { %>
+                                                    <a href="/learn/<%= course._id %>/<%= lesson._id %>">
+                                                        <span><%= lesson.title %></span>
+                                                        <span><%= lesson.durationMinutes %> min <span aria-hidden="true">→</span></span>
+                                                    </a>
+                                                <% } else { %>
+                                                    <span><%= lesson.title %></span>
+                                                    <span><%= lesson.durationMinutes %> min</span>
+                                                <% } %>
+                                                <% if (lesson.summary) { %>
+                                                    <p><%= lesson.summary %></p>
+                                                <% } %>
+                                            </li>
+                                        <% }); %>
+                                    </ol>
+                                </li>
+                            <% }); %>
+                        </ol>
+                    <% } else { %>
+                        <p class="curriculum-empty">The instructor has not added lessons to this course yet.</p>
+                    <% } %>
+                </section>
             </article>
             <aside class="enroll-panel">
                 <p class="eyebrow">Join this course</p>
                 <h2>Ready to enroll?</h2>
-                <% if (currentUser) { %>
+                <% if (learningEnrollment) { %>
+                    <p>You are enrolled and have completed <strong><%= learningEnrollment.progress %>%</strong> of this course.</p>
+                <% } else if (currentUser && currentUser.role === 'student') { %>
                     <p>Enroll as <strong><%= currentUser.name %></strong> (<%= currentUser.email %>).</p>
-                <% } else { %>
+                <% } else if (!currentUser) { %>
                     <p class="enroll-panel-copy">Join the class in a few steps. Sign in to continue, or create a free student account.</p>
+                <% } else { %>
+                    <p>Course enrollment is available to student accounts.</p>
                 <% } %>
-                <% if (course.enrollmentCount >= course.capacity) { %>
+                <% if (learningEnrollment && learningEnrollment.lessonCount > 0) { %>
+                    <a class="enroll-button auth-enroll-link" href="<%= learningEnrollment.continueUrl %>">
+                        <span><%= learningEnrollment.progress === 100 ? 'Review course' : 'Continue learning' %></span>
+                        <span aria-hidden="true">→</span>
+                    </a>
+                <% } else if (learningEnrollment) { %>
+                    <button class="enroll-button" type="button" disabled>Lessons coming soon</button>
+                <% } else if (course.enrollmentCount >= course.capacity) { %>
                     <button class="enroll-button" type="button" disabled>Course is full</button>
                 <% } else if (!currentUser) { %>
                     <div class="enroll-auth-actions">
@@ -49,7 +100,7 @@
                             <a href="/signup?next=<%= encodeURIComponent(`/courses/${course._id}`) %>">Create a student account</a>
                         </p>
                     </div>
-                <% } else { %>
+                <% } else if (currentUser.role === 'student') { %>
                     <form class="enroll-form" action="/enroll" method="POST">
                         <input type="hidden" name="courseId" value="<%= course._id %>">
                         <input type="hidden" name="_csrf" value="<%= csrfToken %>">

@@ -25,7 +25,7 @@
                     <h2 id="courses-title">Search and browse courses</h2>
                     <p class="section-copy">Search course titles, descriptions, or instructors, then narrow your results.</p>
                 </div>
-                <span class="catalog-count"><%= courses.length %> courses</span>
+                <span class="catalog-count"><%= filters.totalCourses %> courses</span>
             </div>
 
             <form class="catalog-filters" action="/courses" method="GET" role="search" aria-label="Search and filter courses">
@@ -50,6 +50,14 @@
                         <option value="available" <%= filters.availability === 'available' ? 'selected' : '' %>>Open places</option>
                     </select>
                 </label>
+                <label for="course-sort">
+                    <span>Sort by</span>
+                    <select id="course-sort" name="sort">
+                        <option value="title" <%= filters.sort === 'title' ? 'selected' : '' %>>Course name</option>
+                        <option value="newest" <%= filters.sort === 'newest' ? 'selected' : '' %>>Newest</option>
+                        <option value="popular" <%= filters.sort === 'popular' ? 'selected' : '' %>>Most enrolled</option>
+                    </select>
+                </label>
                 <div class="filter-actions">
                     <button class="lookup-button" type="submit">Apply filters</button>
                     <% if (filters.search || filters.category || filters.availability) { %>
@@ -57,12 +65,19 @@
                     <% } %>
                 </div>
             </form>
-            <div class="catalog-tools" data-favorites-tools hidden>
+            <div class="catalog-tools" data-favorites-tools
+                data-persisted="<%= persistedFavorites %>"
+                data-saved-course-ids="<%= savedCourseIds.join(',') %>"
+                data-saved-course-count="<%= savedCourseCount %>"
+                data-csrf="<%= csrfToken %>" hidden>
                 <p class="favorites-summary" data-favorites-summary aria-live="polite"></p>
                 <button class="favorites-filter" type="button" data-favorites-filter aria-pressed="false">
                     <span data-favorites-label>Show saved courses</span>
                     <span data-favorites-count>0</span>
                 </button>
+                <% if (persistedFavorites) { %>
+                    <a class="saved-courses-link" href="/saved-courses">Open wishlist</a>
+                <% } %>
             </div>
 
             <% if (courses.length === 0) { %>
@@ -73,7 +88,7 @@
                 </div>
             <% } else { %>
                 <div class="course-grid">
-                    <% courses.forEach((course, index) => { %>
+                    <% courses.forEach((course) => { %>
                         <article class="course-card">
                             <%- include('./components/course-photo', { course }) %>
                             <div class="course-card-top">
@@ -82,6 +97,7 @@
                             <button class="favorite-button" type="button"
                                 data-favorite-button data-course-id="<%= course._id %>"
                                 data-course-title="<%= course.title %>"
+                                data-favorite-saved="<%= savedCourseIds.includes(course._id.toString()) %>"
                                 aria-pressed="false" aria-label="Save <%= course.title %>">
                                 <span data-favorite-icon aria-hidden="true">☆</span>
                                 <span data-favorite-label>Save course</span>
@@ -109,6 +125,21 @@
                         </article>
                     <% }); %>
                 </div>
+                <% if (filters.pageCount > 1) { %>
+                    <nav class="course-pagination" aria-label="Course catalog pages">
+                        <% if (filters.page > 1) { %>
+                            <a href="/courses?q=<%= encodeURIComponent(filters.search) %>&category=<%= encodeURIComponent(filters.category) %>&availability=<%= filters.availability %>&sort=<%= filters.sort %>&page=<%= filters.page - 1 %>" rel="prev">← Previous</a>
+                        <% } else { %>
+                            <span class="pagination-disabled">← Previous</span>
+                        <% } %>
+                        <span>Page <%= filters.page %> of <%= filters.pageCount %></span>
+                        <% if (filters.page < filters.pageCount) { %>
+                            <a href="/courses?q=<%= encodeURIComponent(filters.search) %>&category=<%= encodeURIComponent(filters.category) %>&availability=<%= filters.availability %>&sort=<%= filters.sort %>&page=<%= filters.page + 1 %>" rel="next">Next →</a>
+                        <% } else { %>
+                            <span class="pagination-disabled">Next →</span>
+                        <% } %>
+                    </nav>
+                <% } %>
                 <div class="empty-state favorites-empty" data-favorites-empty hidden>
                     <h3>No saved courses in this view</h3>
                     <p>Save a course with the star button, or show all courses again.</p>

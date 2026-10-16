@@ -1369,6 +1369,624 @@ a:focus-visible {
     }
 }
 
+.learning-stats {
+    width: min(1120px, 88%);
+    margin: 28px auto 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.learning-stats article {
+    padding: 20px;
+    display: grid;
+    gap: 9px;
+    border: 1px solid #e9dfd1;
+    border-radius: 12px;
+    background: #fffdf8;
+}
+
+.learning-stats span,
+.progress-label span {
+    color: #777067;
+    font-size: 0.78rem;
+}
+
+.learning-stats strong {
+    color: #934c2f;
+    font-size: 1.7rem;
+    line-height: 1;
+}
+
+.student-dashboard-actions {
+    width: min(1120px, 88%);
+    margin: 18px auto 0;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+.student-dashboard-actions .enroll-button {
+    padding: 0 15px;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
+}
+
+.enrollment-progress {
+    width: 190px;
+    display: grid;
+    gap: 6px;
+}
+
+.progress-label {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.progress-label strong {
+    color: #8c4a2d;
+    font-size: 0.78rem;
+}
+
+.course-progress {
+    width: 100%;
+    height: 8px;
+    display: block;
+    overflow: hidden;
+    border: 0;
+    border-radius: 99px;
+    background: #eee5d9;
+    accent-color: #a6532f;
+}
+
+.course-progress::-webkit-progress-bar {
+    border-radius: 99px;
+    background: #eee5d9;
+}
+
+.course-progress::-webkit-progress-value {
+    border-radius: 99px;
+    background: #a6532f;
+}
+
+.course-progress::-moz-progress-bar {
+    border-radius: 99px;
+    background: #a6532f;
+}
+
+.enrollment-progress a {
+    color: #a6532f;
+    font-size: 0.76rem;
+    font-weight: 750;
+    text-decoration: none;
+}
+
+.enrollment-progress a:hover,
+.enrollment-progress a:focus-visible {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.my-courses-section {
+    padding-top: 42px;
+}
+
+.course-status-tabs {
+    margin: 0 0 23px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.course-status-tabs a {
+    padding: 9px 13px;
+    border: 1px solid #e9dfd1;
+    border-radius: 999px;
+    color: #76513b;
+    background: #fffdf8;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.course-status-tabs a.is-active {
+    border-color: #a6532f;
+    color: #fffdf8;
+    background: #a6532f;
+}
+
+.student-course-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+}
+
+.student-course-card {
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    border: 1px solid #e9dfd1;
+    border-radius: 13px;
+    background: #fffdf8;
+    box-shadow: 0 8px 26px rgb(66 46 32 / 5%);
+}
+
+.student-course-card .eyebrow {
+    margin: 0 0 6px;
+    font-size: 0.67rem;
+}
+
+.student-course-card h3 {
+    margin: 0;
+    color: #3e3028;
+    font-size: 1.08rem;
+}
+
+.student-course-meta {
+    margin: 7px 0 15px;
+    color: #777067;
+    font-size: 0.76rem;
+    line-height: 1.5;
+}
+
+.student-course-card .course-progress {
+    margin: 7px 0 0;
+}
+
+.student-course-card .course-link {
+    margin-top: auto;
+}
+
+.course-pagination {
+    margin-top: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    color: #777067;
+    font-size: 0.82rem;
+}
+
+.course-pagination a {
+    color: #a6532f;
+    font-weight: 750;
+    text-decoration: none;
+}
+
+.course-pagination a:hover,
+.course-pagination a:focus-visible {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.pagination-disabled {
+    color: #aaa196;
+}
+
+.course-curriculum {
+    margin-top: 28px;
+    padding-top: 24px;
+    border-top: 1px solid #ece3d8;
+}
+
+.curriculum-heading,
+.curriculum-editor-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.curriculum-heading .eyebrow {
+    margin: 0 0 4px;
+}
+
+.curriculum-heading h2,
+.curriculum-editor-heading h2 {
+    margin: 0;
+    color: #3e3028;
+    font-size: 1.3rem;
+}
+
+.curriculum-heading > span {
+    color: #777067;
+    font-size: 0.76rem;
+}
+
+.course-module-list,
+.course-lesson-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.course-module-list {
+    margin-top: 16px;
+    display: grid;
+    gap: 12px;
+}
+
+.course-module {
+    padding: 15px;
+    border: 1px solid #ece3d8;
+    border-radius: 10px;
+    background: #fffefa;
+}
+
+.course-module > h3 {
+    margin: 0 0 10px;
+    display: flex;
+    gap: 9px;
+    color: #49382d;
+    font-size: 0.9rem;
+}
+
+.course-module > h3 span {
+    color: #a6532f;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+}
+
+.course-lesson-list > li {
+    padding: 10px 0;
+    border-top: 1px solid #f0e9e0;
+    color: #59493c;
+    font-size: 0.82rem;
+}
+
+.course-lesson-list > li > a,
+.course-lesson-list > li > span:first-child {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.course-lesson-list > li > a {
+    color: #59493c;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.course-lesson-list > li > a:hover,
+.course-lesson-list > li > a:focus-visible {
+    color: #a6532f;
+}
+
+.course-lesson-list > li > p {
+    margin: 5px 0 0;
+    color: #817568;
+    font-size: 0.75rem;
+    line-height: 1.5;
+}
+
+.curriculum-empty {
+    color: #777067;
+    font-size: 0.84rem;
+}
+
+.course-curriculum-editor {
+    grid-column: 1 / -1;
+    min-width: 0;
+    margin-top: 6px;
+    padding: 20px;
+    border: 1px solid #e9dfd1;
+    border-radius: 11px;
+    background: #faf6ee;
+}
+
+.curriculum-editor-heading {
+    align-items: flex-start;
+}
+
+.curriculum-editor-heading .password-hint {
+    max-width: 520px;
+    margin-top: 6px;
+    line-height: 1.5;
+}
+
+.curriculum-module-list {
+    margin-top: 16px;
+    display: grid;
+    gap: 14px;
+}
+
+.curriculum-module {
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid #e9dfd1;
+    border-radius: 9px;
+    background: #fffdf8;
+}
+
+.curriculum-module > label {
+    margin-bottom: 6px;
+    display: block;
+    color: #59493c;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.curriculum-module > input,
+.curriculum-lesson-grid input,
+.curriculum-lesson-grid textarea {
+    width: 100%;
+    min-height: 42px;
+    padding: 9px 11px;
+    border: 1px solid #e3d9ca;
+    border-radius: 7px;
+    color: #40352c;
+    background: #fffefa;
+    font: inherit;
+    font-size: 0.82rem;
+}
+
+.curriculum-lesson-grid textarea {
+    min-height: 96px;
+    resize: vertical;
+}
+
+.curriculum-module-heading,
+.curriculum-lesson-heading {
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.curriculum-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.curriculum-move-button {
+    width: 30px;
+    height: 30px;
+    border: 1px solid #e9dfd1;
+    border-radius: 6px;
+    color: #76513b;
+    background: #fffdf8;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 800;
+}
+
+.curriculum-move-button:hover,
+.curriculum-move-button:focus-visible {
+    border-color: #c0804c;
+    color: #8f4a2d;
+    background: #f8ede0;
+}
+
+.curriculum-module-heading h3,
+.curriculum-lesson-heading h4 {
+    margin: 0;
+    color: #49382d;
+    font-size: 0.9rem;
+}
+
+.curriculum-lessons {
+    margin: 13px 0;
+    display: grid;
+    gap: 10px;
+}
+
+.curriculum-lesson {
+    padding: 13px;
+    border: 1px solid #eee7dc;
+    border-radius: 8px;
+    background: #faf8f2;
+}
+
+.curriculum-lesson-heading {
+    margin-bottom: 10px;
+}
+
+.curriculum-lesson-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 11px;
+}
+
+.curriculum-lesson-grid .course-editor-field {
+    gap: 5px;
+}
+
+.curriculum-lesson-grid label {
+    color: #59493c;
+    font-size: 0.74rem;
+    font-weight: 700;
+}
+
+.curriculum-lesson-wide {
+    grid-column: 1 / -1;
+}
+
+.curriculum-add-button,
+.curriculum-remove-button {
+    min-height: 34px;
+    padding: 0 11px;
+    border: 1px solid #d8c7b4;
+    border-radius: 7px;
+    color: #8f4a2d;
+    background: #fffdf8;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.74rem;
+    font-weight: 750;
+}
+
+.curriculum-add-button:hover,
+.curriculum-add-button:focus-visible {
+    border-color: #a6532f;
+    background: #f8ede0;
+}
+
+.curriculum-remove-button {
+    min-height: 30px;
+    border-color: transparent;
+    color: #8b5c48;
+    background: transparent;
+}
+
+.curriculum-remove-button:hover,
+.curriculum-remove-button:focus-visible {
+    color: #8b3025;
+    background: #fff0eb;
+}
+
+.lesson-shell {
+    width: min(980px, 88%);
+    margin: 0 auto;
+    padding: 38px 0 72px;
+}
+
+.lesson-shell > .back-link {
+    margin: 0 0 20px;
+}
+
+.lesson-heading {
+    margin-bottom: 20px;
+}
+
+.lesson-heading h1 {
+    margin: 0;
+    color: #3e3028;
+    font-size: clamp(1.8rem, 4vw, 2.6rem);
+    letter-spacing: -0.04em;
+}
+
+.lesson-heading > p:not(.eyebrow) {
+    color: #777067;
+    line-height: 1.6;
+}
+
+.lesson-content-panel {
+    padding: clamp(18px, 4vw, 32px);
+    border: 1px solid #e9dfd1;
+    border-radius: 13px;
+    background: #fffdf8;
+    box-shadow: 0 8px 26px rgb(66 46 32 / 5%);
+}
+
+.lesson-video {
+    width: 100%;
+    max-height: 580px;
+    margin-bottom: 20px;
+    border-radius: 9px;
+    background: #211c18;
+}
+
+.lesson-reading {
+    color: #59493c;
+    font-size: 0.96rem;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.lesson-actions {
+    margin-top: 24px;
+    padding-top: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    border-top: 1px solid #ece3d8;
+}
+
+.lesson-actions form .enroll-button,
+.lesson-next {
+    width: auto;
+    min-width: 160px;
+}
+
+.lesson-actions form .enroll-button {
+    padding: 0 14px;
+}
+
+.lesson-next {
+    padding: 0 14px;
+}
+
+.lesson-complete-label {
+    color: #477151;
+    font-size: 0.82rem;
+    font-weight: 750;
+}
+
+@media (max-width: 760px) {
+    .learning-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .student-course-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 560px) {
+    .learning-stats,
+    .student-dashboard-actions {
+        width: 90%;
+    }
+
+    .learning-stats article {
+        padding: 15px;
+    }
+
+    .student-course-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .enrollment-row {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .enrollment-progress {
+        width: 100%;
+        margin-left: 42px;
+    }
+
+    .course-curriculum-editor {
+        padding: 13px;
+    }
+
+    .curriculum-editor-heading {
+        flex-direction: column;
+    }
+
+    .curriculum-lesson-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .curriculum-lesson-wide {
+        grid-column: auto;
+    }
+
+    .course-pagination {
+        gap: 10px;
+        font-size: 0.74rem;
+    }
+
+    .lesson-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .lesson-actions form .enroll-button,
+    .lesson-next {
+        width: 100%;
+    }
+}
+
 @media (max-width: 420px) {
     .brand {
         font-size: 0.94rem;
@@ -2865,5 +3483,172 @@ a:focus-visible {
     .profile-card,
     .profile-panel {
         padding: 22px;
+    }
+}
+
+.activity-summary {
+    width: min(1120px, 88%);
+    margin: 32px auto 0;
+    padding: clamp(19px, 3vw, 30px);
+    border: 1px solid #e9dfd1;
+    border-radius: 14px;
+    background: #fffdf8;
+    box-shadow: 0 8px 26px rgb(66 46 32 / 5%);
+}
+
+.activity-summary > .section-heading {
+    margin-bottom: 18px;
+}
+
+.activity-summary > .section-heading > p {
+    margin: 0;
+    color: #777067;
+    font-size: 0.8rem;
+}
+
+.activity-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.activity-stat-grid article {
+    padding: 15px;
+    display: grid;
+    gap: 8px;
+    border: 1px solid #eee5d9;
+    border-radius: 10px;
+    background: #fbf7f0;
+}
+
+.activity-stat-grid span,
+.activity-stat-grid small {
+    color: #777067;
+    font-size: 0.75rem;
+}
+
+.activity-stat-grid strong {
+    color: #934c2f;
+    font-size: 1.35rem;
+}
+
+.weekly-goal-card {
+    margin-top: 17px;
+    padding: 16px;
+    display: grid;
+    gap: 10px;
+    border-radius: 10px;
+    background: #f8ede0;
+}
+
+.weekly-goal-card .back-link {
+    justify-self: start;
+    color: #934c2f;
+    font-size: 0.78rem;
+}
+
+.activity-week {
+    margin: 20px 0 0;
+    padding: 0;
+    display: grid;
+    gap: 9px;
+    list-style: none;
+}
+
+.activity-week li {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 64px;
+    align-items: center;
+    gap: 10px;
+    color: #777067;
+    font-size: 0.76rem;
+}
+
+.activity-week li strong {
+    color: #5c4838;
+    font-size: 0.73rem;
+    text-align: right;
+}
+
+.activity-bar {
+    height: 9px;
+    overflow: hidden;
+    border-radius: 99px;
+    background: #eee5d9;
+}
+
+.activity-bar > span {
+    height: 100%;
+    display: block;
+    border-radius: inherit;
+    background: #a6532f;
+}
+
+.activity-disclaimer {
+    margin: 14px 0 0;
+    color: #777067;
+    font-size: 0.72rem;
+    line-height: 1.5;
+}
+
+.saved-courses-link {
+    color: #934c2f;
+    font-size: 0.78rem;
+    font-weight: 750;
+    text-decoration: none;
+}
+
+.saved-courses-link:hover,
+.saved-courses-link:focus-visible {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.saved-course-card .course-description {
+    flex: 1;
+}
+
+.saved-course-actions {
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.saved-course-actions .course-link {
+    margin-top: 0;
+}
+
+.saved-course-actions form {
+    margin: 0;
+}
+
+.saved-course-archived {
+    color: #777067;
+    font-size: 0.75rem;
+}
+
+@media (max-width: 650px) {
+    .student-dashboard-actions {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .activity-stat-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .activity-summary > .section-heading {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .saved-course-actions {
+        align-items: flex-start;
+        flex-direction: column;
     }
 }

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="<%= lesson.summary || lesson.title %>">
+    <title>CourseHub | <%= lesson.title %></title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <%- include('./components/header') %>
+    <main class="lesson-shell">
+        <a class="back-link" href="/courses/<%= course._id %>">← Back to <%= course.title %></a>
+        <% if (notice) { %>
+            <div class="notice <%= notice.type %>" role="status"><%= notice.message %></div>
+        <% } %>
+        <section class="lesson-heading">
+            <p class="eyebrow"><%= lesson.moduleTitle %> · Lesson <%= lessonIndex + 1 %> of <%= lessons.length %></p>
+            <h1><%= lesson.title %></h1>
+            <% if (lesson.summary) { %><p><%= lesson.summary %></p><% } %>
+            <div class="progress-label"><span>Your course progress</span><strong><%= progress %>%</strong></div>
+            <progress class="course-progress" value="<%= progress %>" max="100" aria-label="<%= progress %>% course progress"><%= progress %>%</progress>
+        </section>
+        <article class="lesson-content-panel">
+            <% if (lesson.videoUrl) { %>
+                <video class="lesson-video" controls preload="metadata">
+                    <source src="<%= lesson.videoUrl %>">
+                    Your browser does not support embedded video. <a href="<%= lesson.videoUrl %>">Open the video</a>.
+                </video>
+            <% } %>
+            <% if (lesson.content) { %>
+                <div class="lesson-reading"><%= lesson.content %></div>
+            <% } else if (!lesson.videoUrl) { %>
+                <p class="curriculum-empty">Your instructor has not added lesson content yet.</p>
+            <% } %>
+            <div class="lesson-actions">
+                <% if (completed) { %>
+                    <span class="lesson-complete-label">✓ Lesson completed</span>
+                <% } else { %>
+                    <form action="/learn/<%= course._id %>/<%= lesson._id %>/complete" method="POST">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                        <button class="enroll-button" type="submit">Mark as complete <span aria-hidden="true">✓</span></button>
+                    </form>
+                <% } %>
+                <% if (lessonIndex + 1 < lessons.length) { %>
+                    <a class="course-link lesson-next" href="/learn/<%= course._id %>/<%= lessons[lessonIndex + 1]._id %>">
+                        Next lesson <span aria-hidden="true">→</span>
+                    </a>
+                <% } else { %>
+                    <a class="course-link lesson-next" href="/my-courses">Back to my courses <span aria-hidden="true">→</span></a>
+                <% } %>
+            </div>
+        </article>
+    </main>
+    <%- include('./components/footer') %>
+</body>
+</html>

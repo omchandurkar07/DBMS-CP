@@ -12,12 +12,61 @@
     <main>
         <section class="page-banner">
             <p class="eyebrow">Student dashboard</p>
-            <h1>My learning</h1>
-            <p>See your enrollments and keep your next learning steps together.</p>
+            <h1>Welcome back, <%= studentName %></h1>
+            <p>Your learning at a glance. Pick up where you left off or explore your courses.</p>
         </section>
         <% if (notice) { %>
             <div class="notice <%= notice.type %>" role="status"><%= notice.message %></div>
         <% } %>
+        <section class="learning-stats" aria-label="Your learning statistics">
+            <article><span>Enrolled courses</span><strong><%= stats.enrolledCount %></strong></article>
+            <article><span>In progress</span><strong><%= stats.inProgressCount %></strong></article>
+            <article><span>Completed</span><strong><%= stats.completedCount %></strong></article>
+            <article><span>Lessons completed</span><strong><%= stats.completedLessonCount %></strong></article>
+        </section>
+        <div class="student-dashboard-actions">
+            <a class="enroll-button" href="/my-courses">View my courses <span aria-hidden="true">→</span></a>
+            <a class="course-link" href="/saved-courses">Saved courses (<%= savedCourseCount %>) <span aria-hidden="true">→</span></a>
+            <a class="back-link" href="/courses">Discover courses</a>
+        </div>
+        <section class="activity-summary" aria-labelledby="weekly-activity-title">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Your recent activity</p>
+                    <h2 id="weekly-activity-title">This week</h2>
+                </div>
+                <p>Week of <time datetime="<%= activity.weekStart %>"><%= new Date(activity.weekStart).toLocaleDateString(undefined, { timeZone: 'UTC' }) %></time></p>
+            </div>
+            <div class="activity-stat-grid">
+                <article><span>Lesson minutes completed</span><strong><%= activity.weeklyMinutes %></strong></article>
+                <article><span>Lessons completed</span><strong><%= activity.weeklyLessons %></strong></article>
+                <article><span>Current completion streak</span><strong><%= activity.streakDays %> <small><%= activity.streakDays === 1 ? 'day' : 'days' %></small></strong></article>
+            </div>
+            <div class="weekly-goal-card">
+                <div class="progress-label">
+                    <span>Weekly goal · <%= weeklyLearningGoalMinutes %> lesson minutes</span>
+                    <strong><%= activity.weeklyMinutes %> / <%= weeklyLearningGoalMinutes %> min</strong>
+                </div>
+                <progress class="course-progress" value="<%= Math.min(activity.weeklyMinutes, weeklyLearningGoalMinutes) %>"
+                    max="<%= weeklyLearningGoalMinutes %>" aria-label="<%= activity.weeklyMinutes %> of <%= weeklyLearningGoalMinutes %> weekly lesson minutes completed">
+                    <%= activity.goalProgress %>%
+                </progress>
+                <a class="back-link" href="/profile#weekly-learning-goal">Change your weekly goal</a>
+            </div>
+            <ol class="activity-week" aria-label="Completed lesson minutes by day">
+                <% const largestDay = Math.max(1, ...activity.week.map((day) => day.minutes)); %>
+                <% activity.week.forEach((day) => { %>
+                    <li>
+                        <span><%= day.label %></span>
+                        <span class="activity-bar" aria-hidden="true">
+                            <span style="width: <%= day.minutes ? Math.max(8, Math.round(day.minutes / largestDay * 100)) : 0 %>%"></span>
+                        </span>
+                        <strong><%= day.minutes %> min</strong>
+                    </li>
+                <% }); %>
+            </ol>
+            <p class="activity-disclaimer">Minutes are estimated from lesson durations when you mark lessons complete. They are not measured time-on-page.</p>
+        </section>
         <%- include('./components/my-enrollments') %>
     </main>
     <%- include('./components/footer') %>

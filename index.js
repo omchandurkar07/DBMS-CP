@@ -7,6 +7,8 @@ const { createHash, randomBytes, scrypt, timingSafeEqual } = require('crypto');
 const Course = require('./models/Course');
 const Enrollment = require('./models/Enrollment');
 const StudentAccount = require('./models/StudentAccount');
+const StudentLearningActivity = require('./models/StudentLearningActivity');
+const StudentSavedCourse = require('./models/StudentSavedCourse');
 const StudentSession = require('./models/StudentSession');
 
 require('dotenv').config();
@@ -20,7 +22,7 @@ const sessionLifetimeMs = 7 * 24 * 60 * 60 * 1000;
 const scryptAsync = promisify(scrypt);
 const coursePhotoUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 10, fieldSize: 4096, parts: 12 },
+    limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 700, fieldSize: 22000, parts: 710 },
     fileFilter(req, file, callback) {
         if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
             return callback(new Error('Upload a JPEG, PNG, or WebP image.'));
@@ -53,9 +55,14 @@ const notices = {
     signedOut: { type: 'success', message: 'You have been signed out.' },
     profileUpdated: { type: 'success', message: 'Your profile has been updated.' },
     profileInvalid: { type: 'error', message: 'Enter a name between 1 and 80 characters.' },
+    profileGoalUpdated: { type: 'success', message: 'Your weekly learning goal has been updated.' },
+    learningGoalInvalid: { type: 'error', message: 'Choose a weekly learning goal from 30 to 1,680 minutes in 30-minute increments.' },
+    savedCourseRemoved: { type: 'success', message: 'The course was removed from your saved courses.' },
     courseCreated: { type: 'success', message: 'The course has been created.' },
     courseUpdated: { type: 'success', message: 'The course has been updated.' },
-    courseStatusUpdated: { type: 'success', message: 'The course status has been updated.' }
+    courseStatusUpdated: { type: 'success', message: 'The course status has been updated.' },
+    lessonCompleted: { type: 'success', message: 'Lesson completed. Your course progress has been updated.' },
+    lessonUnavailable: { type: 'error', message: 'That lesson could not be found in this course.' }
 };
 
 function getNotice(req) {
@@ -178,8 +185,9 @@ async function getCoursesWithEnrollmentCounts(courseFilter = {}, includeInactive
     const courseDocuments = await Course.find({
         ...(!includeInactive ? { isActive: true } : {}),
         ...courseFilter
-    }).select('-photoData').sort({ title: 1 }).lean();
+    }).select('-photoData -modules').sort({ title: 1 }).lean();
     const enrollmentCounts = await Enrollment.aggregate([
+        { $match: { course: { $in: courseDocuments.map((course) => course._id) } } },
         { $group: { _id: '$course', count: { $sum: 1 } } }
     ]);
     const countByCourse = new Map(
@@ -398,7 +406,9 @@ app.post('/logout', requireAuth, requireCsrf, async (req, res) => {
 
 app.get('/profile', requireAuth, async (req, res) => {
     const [account, enrollmentCount] = await Promise.all([
-        StudentAccount.findById(req.user._id).select('_id name email createdAt').lean(),
+        StudentAccount.findById(req.user._id)
+            .select('_id name email role createdAt weeklyLearningGoalMinutes')
+            .lean(),
         Enrollment.countDocuments({ studentAccount: req.user._id })
     ]);
 
@@ -407,7 +417,7 @@ app.get('/profile', requireAuth, async (req, res) => {
     }
 
     return res.render('Profile.ejs', {
-        account,
+        account: { ...account, role: req.user.role },
         enrollmentCount,
         notice: getNotice(req)
     });
@@ -430,6 +440,79 @@ app.post('/profile', requireAuth, requireCsrf, async (req, res) => {
     }
 
     return res.redirect('/profile?status=profileUpdated');
+});
+
+app.post('/profile/learning-goal', requireAuth, requireRole('student'), requireCsrf, async (req, res) => {
+    const minutesValue = typeof req.body.weeklyLearningGoalMinutes === 'string'
+        ? req.body.weeklyLearningGoalMinutes.trim()
+        : '';
+    const minutes = /^\d+$/.test(minutesValue) ? Number(minutesValue) : NaN;
+    if (!Number.isSafeInteger(minutes) || minutes < 30 || minutes > 1680 || minutes % 30 !== 0) {
+        return res.redirect('/profile?status=learningGoalInvalid');
+    }
+
+    const updateResult = await StudentAccount.updateOne(
+        { _id: req.user._id },
+        { $set: { weeklyLearningGoalMinutes: minutes } },
+        { runValidators: true }
+    );
+    if (!updateResult.matchedCount) {
+        return res.redirect('/login');
+    }
+    return res.redirect('/profile?status=profileGoalUpdated');
+});
+
+app.get('/saved-courses', requireAuth, requireRole('student'), async (req, res) => {
+    const savedCourses = await StudentSavedCourse.find({ studentAccount: req.user._id })
+        .sort({ savedAt: -1 })
+        .populate({
+            path: 'course',
+            select: 'title category instructor description duration capacity photoContentType updatedAt isActive'
+        })
+        .lean();
+    return res.render('SavedCourses.ejs', {
+        courses: savedCourses.map((savedCourse) => savedCourse.course).filter(Boolean),
+        notice: getNotice(req)
+    });
+});
+
+app.post('/saved-courses/:courseId', requireAuth, requireRole('student'), requireCsrf, async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.courseId) ||
+        !['true', 'false', true, false].includes(req.body.saved)) {
+        return res.status(400).json({ error: 'Choose whether to save or remove this course.' });
+    }
+    const saved = req.body.saved === 'true' || req.body.saved === true;
+    if (saved) {
+        const courseExists = await Course.exists({ _id: req.params.courseId, isActive: true });
+        if (!courseExists) {
+            return res.status(404).json({ error: 'Only active courses can be saved.' });
+        }
+    }
+
+    if (saved) {
+        try {
+            await StudentSavedCourse.updateOne(
+                { studentAccount: req.user._id, course: req.params.courseId },
+                { $setOnInsert: { savedAt: new Date() } },
+                { upsert: true }
+            );
+        } catch (error) {
+            if (error.code !== 11000) {
+                throw error;
+            }
+        }
+    } else {
+        await StudentSavedCourse.deleteOne({
+            studentAccount: req.user._id,
+            course: req.params.courseId
+        });
+    }
+    const savedCourseCount = await StudentSavedCourse.countDocuments({ studentAccount: req.user._id });
+
+    if (req.is('application/json')) {
+        return res.json({ saved, savedCourseCount });
+    }
+    return res.redirect(saved ? '/saved-courses' : '/saved-courses?status=savedCourseRemoved');
 });
 
 app.get('/', async (req, res) => {
@@ -457,6 +540,12 @@ app.get('/courses', async (req, res) => {
         ? req.query.category.trim().slice(0, 60)
         : '';
     const availability = req.query.availability === 'available' ? 'available' : '';
+    const sort = ['title', 'newest', 'popular'].includes(req.query.sort) ? req.query.sort : 'title';
+    const requestedPage = typeof req.query.page === 'string' && /^\d+$/.test(req.query.page) &&
+        Number.isSafeInteger(Number(req.query.page))
+        ? Math.min(Number(req.query.page), 1000000)
+        : 1;
+    const pageSize = 9;
     const courseFilter = {};
 
     if (search) {
@@ -473,16 +562,81 @@ app.get('/courses', async (req, res) => {
         courseFilter.category = category;
     }
 
-    let courses = await getCoursesWithEnrollmentCounts(courseFilter);
-    if (availability === 'available') {
-        courses = courses.filter((course) => course.enrollmentCount < course.capacity);
-    }
-    const categories = await Course.distinct('category', { isActive: true });
+    const sortOptions = {
+        title: { title: 1 },
+        newest: { createdAt: -1, title: 1 },
+        popular: { enrollmentCount: -1, title: 1 }
+    };
+    const pipeline = [
+        { $match: { isActive: true, ...courseFilter } },
+        {
+            $lookup: {
+                from: Enrollment.collection.name,
+                let: { courseId: '$_id' },
+                pipeline: [
+                    { $match: { $expr: { $eq: ['$course', '$$courseId'] } } },
+                    { $count: 'count' }
+                ],
+                as: 'enrollmentStats'
+            }
+        },
+        {
+            $addFields: {
+                enrollmentCount: { $ifNull: [{ $arrayElemAt: ['$enrollmentStats.count', 0] }, 0] }
+            }
+        },
+        ...(availability === 'available' ? [{
+            $match: { $expr: { $lt: ['$enrollmentCount', '$capacity'] } }
+        }] : []),
+        {
+            $facet: {
+                metadata: [{ $count: 'total' }],
+                courses: [
+                    { $sort: sortOptions[sort] },
+                    { $skip: (Math.max(requestedPage, 1) - 1) * pageSize },
+                    { $limit: pageSize },
+                    { $project: { photoData: 0, modules: 0, enrollmentStats: 0 } }
+                ]
+            }
+        }
+    ];
+    const [result] = await Course.aggregate(pipeline);
+    const totalCourses = result.metadata[0] ? result.metadata[0].total : 0;
+    const pageCount = Math.ceil(totalCourses / pageSize);
+    const page = pageCount ? Math.min(Math.max(requestedPage, 1), pageCount) : 1;
+    const courses = page === requestedPage
+        ? result.courses
+        : await Course.aggregate([
+            ...pipeline.slice(0, -1),
+            {
+                $facet: {
+                    metadata: [{ $count: 'total' }],
+                    courses: [
+                        { $sort: sortOptions[sort] },
+                        { $skip: (page - 1) * pageSize },
+                        { $limit: pageSize },
+                        { $project: { photoData: 0, modules: 0, enrollmentStats: 0 } }
+                    ]
+                }
+            }
+        ]).then(([pageResult]) => pageResult.courses);
+    const [categories, savedCoursesAccount] = await Promise.all([
+        Course.distinct('category', { isActive: true }),
+        req.user && req.user.role === 'student'
+            ? StudentSavedCourse.find({ studentAccount: req.user._id }).select('course').lean()
+            : Promise.resolve(null)
+    ]);
+    const savedCourseIds = savedCoursesAccount
+        ? savedCoursesAccount.map((savedCourse) => savedCourse.course.toString())
+        : [];
 
     res.render('Courses.ejs', {
         courses,
+        savedCourseIds,
+        persistedFavorites: Boolean(savedCoursesAccount),
+        savedCourseCount: savedCoursesAccount ? savedCoursesAccount.length : 0,
         categories: categories.sort((first, second) => first.localeCompare(second)),
-        filters: { search, category, availability },
+        filters: { search, category, availability, sort, page, pageCount, totalCourses },
         notice: getNotice(req)
     });
 });
@@ -492,17 +646,35 @@ app.get('/courses/:courseId', async (req, res) => {
         return res.status(404).render('NotFound.ejs');
     }
 
-    const course = await Course.findOne({
+    let course = await Course.findOne({
         _id: req.params.courseId,
         isActive: true
-    }).select('-photoData').lean();
+    }).select('title category instructor description duration capacity photoContentType updatedAt modules.title modules.lessons.title modules.lessons.summary modules.lessons.durationMinutes').lean();
+    if (!course && req.user && req.user.role === 'student') {
+        const isEnrolled = await Enrollment.exists({
+            course: req.params.courseId,
+            studentAccount: req.user._id
+        });
+        if (isEnrolled) {
+            course = await Course.findById(req.params.courseId)
+                .select('title category instructor description duration capacity photoContentType updatedAt modules.title modules.lessons.title modules.lessons.summary modules.lessons.durationMinutes')
+                .lean();
+        }
+    }
     if (!course) {
         return res.status(404).render('NotFound.ejs');
     }
 
     course.enrollmentCount = await Enrollment.countDocuments({ course: course._id });
+    const enrollment = req.user && req.user.role === 'student'
+        ? await Enrollment.findOne({ course: course._id, studentAccount: req.user._id }).lean()
+        : null;
+    const learningEnrollment = enrollment
+        ? prepareEnrollmentForLearning({ ...enrollment, course })
+        : null;
     return res.render('CourseDetails.ejs', {
         course,
+        learningEnrollment,
         notice: getNotice(req)
     });
 });
@@ -524,19 +696,259 @@ app.get('/courses/:courseId/photo', async (req, res) => {
     return res.type(course.photoContentType).send(course.photoData);
 });
 
-app.get('/my-learning', requireAuth, async (req, res) => {
-    const studentEmail = req.user.email;
-    const enrollments = await Enrollment.find({ studentAccount: req.user._id })
-        .populate('course', 'title category instructor photoContentType')
-        .sort({ enrolledAt: -1 })
+function prepareEnrollmentForLearning(enrollment) {
+    if (!enrollment.course) {
+        return { ...enrollment, progress: 0, completedLessonCount: 0, lessonCount: 0, continueUrl: null };
+    }
+    const lessons = (enrollment.course.modules || []).flatMap((module) => module.lessons);
+    const lessonIds = new Set(lessons.map((lesson) => lesson._id.toString()));
+    const completedIds = new Set(
+        (enrollment.completedLessons || [])
+            .map((lessonId) => lessonId.toString())
+            .filter((lessonId) => lessonIds.has(lessonId))
+    );
+    const completedLessonCount = completedIds.size;
+    const progress = lessons.length ? Math.round(completedLessonCount / lessons.length * 100) : 0;
+    const lastLessonId = enrollment.lastLesson && enrollment.lastLesson.toString();
+    const nextLesson = lessons.find((lesson) => lesson._id.toString() === lastLessonId && !completedIds.has(lastLessonId)) ||
+        lessons.find((lesson) => !completedIds.has(lesson._id.toString())) ||
+        lessons[lessons.length - 1];
+
+    return {
+        ...enrollment,
+        progress,
+        completedLessonCount,
+        lessonCount: lessons.length,
+        continueUrl: nextLesson
+            ? `/learn/${enrollment.course._id}/${nextLesson._id}`
+            : `/courses/${enrollment.course._id}`
+    };
+}
+
+async function getStudentLearningEnrollments(studentAccountId) {
+    const enrollments = await Enrollment.find({ studentAccount: studentAccountId })
+        .populate('course', 'title category instructor photoContentType duration modules.title modules.lessons.title modules.lessons.durationMinutes')
+        .sort({ lastActivityAt: -1, enrolledAt: -1 })
         .lean();
+    return enrollments.map(prepareEnrollmentForLearning);
+}
+
+async function getStudentActivitySummary(studentAccountId, now = new Date()) {
+    const dayMilliseconds = 24 * 60 * 60 * 1000;
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const weekStart = new Date(today);
+    weekStart.setUTCDate(weekStart.getUTCDate() - (weekStart.getUTCDay() + 6) % 7);
+    const activities = await StudentLearningActivity.aggregate([
+        { $match: { studentAccount: new mongoose.Types.ObjectId(studentAccountId) } },
+        {
+            $group: {
+                _id: {
+                    $dateToString: {
+                        format: '%Y-%m-%d',
+                        date: '$activityAt',
+                        timezone: 'UTC'
+                    }
+                },
+                minutes: { $sum: '$minutes' },
+                lessons: { $sum: 1 }
+            }
+        },
+        { $sort: { _id: -1 } }
+    ]);
+    const activityByDay = new Map(activities.map((activity) => [
+        activity._id,
+        { minutes: activity.minutes, lessons: activity.lessons }
+    ]));
+    let weeklyMinutes = 0;
+    let weeklyLessons = 0;
+    const weekStartKey = weekStart.toISOString().slice(0, 10);
+    const todayKey = today.toISOString().slice(0, 10);
+    for (const [dateKey, activity] of activityByDay) {
+        if (dateKey >= weekStartKey && dateKey <= todayKey) {
+            weeklyMinutes += activity.minutes;
+            weeklyLessons += activity.lessons;
+        }
+    }
+
+    const activeDays = new Set(activityByDay.keys());
+    const streakStart = new Date(today);
+    if (!activeDays.has(streakStart.toISOString().slice(0, 10))) {
+        streakStart.setUTCDate(streakStart.getUTCDate() - 1);
+    }
+    let streakDays = 0;
+    while (activeDays.has(streakStart.toISOString().slice(0, 10))) {
+        streakDays += 1;
+        streakStart.setUTCDate(streakStart.getUTCDate() - 1);
+    }
+
+    const week = Array.from({ length: 7 }, (_, index) => {
+        const dayDate = new Date(weekStart.getTime() + index * dayMilliseconds);
+        const dateKey = dayDate.toISOString().slice(0, 10);
+        const day = activityByDay.get(dateKey) || { minutes: 0, lessons: 0 };
+        return {
+            date: dateKey,
+            label: dayDate.toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' }),
+            minutes: day.minutes,
+            lessons: day.lessons
+        };
+    });
+
+    return {
+        weeklyMinutes,
+        weeklyLessons,
+        streakDays,
+        week,
+        weekStart: weekStart.toISOString()
+    };
+}
+
+app.get('/my-learning', requireAuth, requireRole('student'), async (req, res) => {
+    const studentEmail = req.user.email;
+    const [enrollments, accountAndSavedCount, activity] = await Promise.all([
+        getStudentLearningEnrollments(req.user._id),
+        Promise.all([
+            StudentAccount.findById(req.user._id).select('weeklyLearningGoalMinutes').lean(),
+            StudentSavedCourse.countDocuments({ studentAccount: req.user._id })
+        ]),
+        getStudentActivitySummary(req.user._id)
+    ]);
+    const inProgressCount = enrollments.filter((enrollment) => enrollment.progress < 100).length;
+    const completedCount = enrollments.filter((enrollment) => enrollment.progress === 100).length;
+    const completedLessonCount = enrollments.reduce(
+        (total, enrollment) => total + enrollment.completedLessonCount,
+        0
+    );
+    const [account, savedCourseCount] = accountAndSavedCount;
+    const weeklyLearningGoalMinutes = account ? account.weeklyLearningGoalMinutes || 300 : 300;
+    activity.goalProgress = Math.min(100, Math.round(activity.weeklyMinutes / weeklyLearningGoalMinutes * 100));
 
     return res.render('MyLearning.ejs', {
         enrollments,
+        stats: {
+            enrolledCount: enrollments.length,
+            inProgressCount,
+            completedCount,
+            completedLessonCount
+        },
+        activity,
+        weeklyLearningGoalMinutes,
+        savedCourseCount,
         studentEmail,
         studentName: req.user.name,
         notice: getNotice(req)
     });
+});
+
+app.get('/my-courses', requireAuth, requireRole('student'), async (req, res) => {
+    const status = ['in-progress', 'completed'].includes(req.query.status) ? req.query.status : 'all';
+    let enrollments = await getStudentLearningEnrollments(req.user._id);
+    if (status === 'completed') {
+        enrollments = enrollments.filter((enrollment) => enrollment.progress === 100);
+    } else if (status === 'in-progress') {
+        enrollments = enrollments.filter((enrollment) => enrollment.progress < 100);
+    }
+    return res.render('MyCourses.ejs', { enrollments, status, notice: getNotice(req) });
+});
+
+app.get('/learn/:courseId/:lessonId', requireAuth, requireRole('student'), async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.courseId) || !mongoose.isValidObjectId(req.params.lessonId)) {
+        return res.status(404).render('NotFound.ejs');
+    }
+
+    const [course, enrollment] = await Promise.all([
+        Course.findById(req.params.courseId)
+            .select('title modules.title modules.lessons.title modules.lessons.summary modules.lessons.content modules.lessons.videoUrl modules.lessons.durationMinutes')
+            .lean(),
+        Enrollment.findOne({ course: req.params.courseId, studentAccount: req.user._id })
+    ]);
+    if (!course || !enrollment) {
+        return res.status(404).render('NotFound.ejs');
+    }
+
+    const lessons = (course.modules || []).flatMap((module) =>
+        module.lessons.map((lesson) => ({ ...lesson, moduleTitle: module.title }))
+    );
+    const lessonIndex = lessons.findIndex((lesson) => lesson._id.toString() === req.params.lessonId);
+    if (lessonIndex === -1) {
+        return res.status(404).render('NotFound.ejs');
+    }
+
+    const lesson = lessons[lessonIndex];
+    const completedIds = new Set((enrollment.completedLessons || []).map((id) => id.toString()));
+    const progress = lessons.length ? Math.round(
+        lessons.filter((item) => completedIds.has(item._id.toString())).length / lessons.length * 100
+    ) : 0;
+    await Enrollment.updateOne(
+        { _id: enrollment._id },
+        { $set: { lastLesson: lesson._id, lastActivityAt: new Date() } }
+    );
+
+    return res.render('Lesson.ejs', {
+        course,
+        lesson,
+        lessons,
+        lessonIndex,
+        completed: completedIds.has(lesson._id.toString()),
+        progress,
+        notice: getNotice(req)
+    });
+});
+
+app.post('/learn/:courseId/:lessonId/complete', requireAuth, requireRole('student'), requireCsrf, async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.courseId) || !mongoose.isValidObjectId(req.params.lessonId)) {
+        return res.status(404).render('NotFound.ejs');
+    }
+
+    const course = await Course.findById(req.params.courseId)
+        .select('modules._id modules.lessons._id modules.lessons.durationMinutes')
+        .lean();
+    const lesson = course && (course.modules || []).flatMap((module) => module.lessons)
+        .find((item) => item._id.toString() === req.params.lessonId);
+    if (!lesson) {
+        return res.redirect('/my-courses?status=lessonUnavailable');
+    }
+
+    const enrollment = await Enrollment.findOneAndUpdate(
+        { course: req.params.courseId, studentAccount: req.user._id },
+        {
+            $addToSet: { completedLessons: new mongoose.Types.ObjectId(req.params.lessonId) },
+            $set: { lastLesson: new mongoose.Types.ObjectId(req.params.lessonId), lastActivityAt: new Date() }
+        },
+        { new: true }
+    );
+    if (!enrollment) {
+        return res.status(403).send('Enroll in this course before marking lessons complete.');
+    }
+
+    try {
+        await StudentLearningActivity.updateOne(
+            {
+                studentAccount: req.user._id,
+                course: course._id,
+                lesson: lesson._id
+            },
+            {
+                $setOnInsert: {
+                    minutes: lesson.durationMinutes,
+                    activityAt: new Date()
+                }
+            },
+            { upsert: true }
+        );
+    } catch (error) {
+        if (error.code !== 11000) {
+            throw error;
+        }
+    }
+
+    const allLessonIds = (course.modules || []).flatMap((module) => module.lessons.map((lesson) => lesson._id.toString()));
+    const completedIds = new Set((enrollment.completedLessons || []).map((id) => id.toString()));
+    if (allLessonIds.length > 0 && allLessonIds.every((lessonId) => completedIds.has(lessonId))) {
+        enrollment.completedAt = enrollment.completedAt || new Date();
+        await enrollment.save();
+    }
+
+    return res.redirect(`/learn/${req.params.courseId}/${req.params.lessonId}?status=lessonCompleted`);
 });
 
 app.get('/teacher', requireAuth, requireRole('teacher'), async (req, res) => {
@@ -577,18 +989,81 @@ app.get('/admin', requireAuth, requireRole('admin'), async (req, res) => {
     });
 });
 
-function getCourseInput(body, user) {
+function getCourseInput(body, user, options = {}) {
     const text = (field) => typeof body[field] === 'string' ? body[field].trim() : '';
     const capacityValue = text('capacity');
     const capacity = /^\d+$/.test(capacityValue) ? Number(capacityValue) : NaN;
+    const rawModules = Array.isArray(body.modules) ? body.modules : [];
+    let hasInvalidVideoUrl = false;
+    const modules = rawModules.map((rawModule) => {
+        const module = rawModule && typeof rawModule === 'object' ? rawModule : {};
+        const lessons = Array.isArray(module.lessons) ? module.lessons.map((rawLesson) => {
+            const lesson = rawLesson && typeof rawLesson === 'object' ? rawLesson : {};
+            const durationValue = typeof lesson.durationMinutes === 'string'
+                ? lesson.durationMinutes.trim()
+                : '';
+            let videoUrl = typeof lesson.videoUrl === 'string' ? lesson.videoUrl.trim() : '';
+            if (videoUrl) {
+                try {
+                    const parsedUrl = new URL(videoUrl);
+                    if (parsedUrl.protocol !== 'https:') {
+                        hasInvalidVideoUrl = true;
+                    }
+                } catch {
+                    hasInvalidVideoUrl = true;
+                }
+            }
+            return {
+                ...(mongoose.isValidObjectId(lesson._id) ? { _id: lesson._id } : {}),
+                title: typeof lesson.title === 'string' ? lesson.title.trim() : '',
+                summary: typeof lesson.summary === 'string' ? lesson.summary.trim() : '',
+                content: typeof lesson.content === 'string' ? lesson.content.trim() : '',
+                videoUrl,
+                durationMinutes: /^\d+$/.test(durationValue) ? Number(durationValue) : NaN
+            };
+        }) : [];
+        return {
+            ...(mongoose.isValidObjectId(module._id) ? { _id: module._id } : {}),
+            title: typeof module.title === 'string' ? module.title.trim() : '',
+            lessons
+        };
+    });
+    const lessonCount = modules.reduce((total, module) => total + module.lessons.length, 0);
+    const totalDuration = modules.reduce(
+        (total, module) => total + module.lessons.reduce((sum, lesson) =>
+            sum + (Number.isSafeInteger(lesson.durationMinutes) ? lesson.durationMinutes : 0), 0),
+        0
+    );
+    const calculatedDuration = totalDuration >= 60
+        ? `${Number((totalDuration / 60).toFixed(1))} hours`
+        : `${totalDuration} min`;
     const course = {
         title: text('title'),
         category: text('category'),
         instructor: user.role === 'admin' ? text('instructor') : user.name,
         description: text('description'),
-        duration: text('duration'),
+        duration: totalDuration ? calculatedDuration : (options.fallbackDuration || ''),
         capacity
     };
+    if (modules.length || body.curriculumPresent === 'true') {
+        course.modules = modules;
+    }
+
+    if ((options.requireCurriculum && modules.length === 0) || modules.length > 30 || lessonCount > 100 ||
+        modules.some((module) => !module.title || module.title.length > 120 ||
+            module.lessons.length === 0 || module.lessons.length > 50 ||
+            module.lessons.some((lesson) => !lesson.title || lesson.title.length > 120 ||
+                lesson.summary.length > 500 || lesson.content.length > 20000 ||
+                !Number.isSafeInteger(lesson.durationMinutes) ||
+                lesson.durationMinutes < 1 || lesson.durationMinutes > 600))) {
+        return {
+            course,
+            error: 'Add valid modules and lessons. Each lesson needs a title and duration from 1 to 600 minutes.'
+        };
+    }
+    if (hasInvalidVideoUrl) {
+        return { course, error: 'Lesson video links must use a valid HTTPS URL.' };
+    }
 
     if (!course.title || course.title.length > 120 ||
         !course.category || course.category.length > 60 ||
@@ -596,7 +1071,7 @@ function getCourseInput(body, user) {
         !course.description || course.description.length > 500 ||
         !course.duration || course.duration.length > 40 ||
         !Number.isSafeInteger(course.capacity) || course.capacity < 1) {
-        return { course, error: 'Complete every field with valid values. Capacity must be a positive whole number.' };
+        return { course, error: 'Complete every field with valid values. Capacity must be positive and lessons need valid durations.' };
     }
 
     return { course, error: null };
@@ -620,14 +1095,17 @@ async function findManageableCourse(courseId, user) {
 
 app.get('/manage/courses/new', requireAuth, requireRole('teacher', 'admin'), (req, res) => {
     return res.render('CourseForm.ejs', {
-        course: { capacity: 30 },
+        course: {
+            capacity: 30,
+            modules: [{ title: '', lessons: [{ title: '', durationMinutes: 10 }] }]
+        },
         error: '',
         returnPath: courseDashboardPath(req.user)
     });
 });
 
 app.post('/manage/courses', requireAuth, requireRole('teacher', 'admin'), parseCoursePhoto, requireCsrf, async (req, res) => {
-    const { course, error } = getCourseInput(req.body, req.user);
+    const { course, error } = getCourseInput(req.body, req.user, { requireCurriculum: true });
     const returnPath = courseDashboardPath(req.user);
     if (error) {
         return res.status(400).render('CourseForm.ejs', { course, error, returnPath });
@@ -684,11 +1162,14 @@ app.post('/manage/courses/:courseId', requireAuth, requireRole('teacher', 'admin
         return res.status(404).render('NotFound.ejs');
     }
 
-    const { course, error } = getCourseInput(req.body, req.user);
+    const { course, error } = getCourseInput(req.body, req.user, {
+        fallbackDuration: existingCourse.duration
+    });
     const returnPath = courseDashboardPath(req.user);
     course._id = existingCourse._id;
     course.isActive = existingCourse.isActive;
     course.photoContentType = existingCourse.photoContentType;
+    course.modules = course.modules || existingCourse.modules;
     if (error) {
         return res.status(400).render('CourseForm.ejs', { course, error, returnPath });
     }
@@ -751,7 +1232,7 @@ app.post('/manage/courses/:courseId/status', requireAuth, requireRole('teacher',
     return res.redirect(`${courseDashboardPath(req.user)}?status=courseStatusUpdated`);
 });
 
-app.post('/enroll', requireAuth, requireCsrf, async (req, res) => {
+app.post('/enroll', requireAuth, requireRole('student'), requireCsrf, async (req, res) => {
     const studentName = req.user.name;
     const studentEmail = req.user.email;
     const courseId = typeof req.body.courseId === 'string' ? req.body.courseId : '';
@@ -785,7 +1266,8 @@ app.post('/enroll', requireAuth, requireCsrf, async (req, res) => {
             studentName,
             studentEmail,
             studentAccount: req.user._id,
-            course: course._id
+            course: course._id,
+            lastActivityAt: new Date()
         });
     } catch (error) {
         if (error.code === 11000) {
@@ -1053,6 +1535,8 @@ async function startServer() {
         Course.init(),
         Enrollment.init(),
         StudentAccount.init(),
+        StudentLearningActivity.init(),
+        StudentSavedCourse.init(),
         StudentSession.init()
     ]);
     await seedCourses();

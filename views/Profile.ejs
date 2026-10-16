@@ -53,6 +53,22 @@
                     </form>
                 </section>
 
+                <% if (account.role === 'student') { %>
+                    <section class="profile-panel" id="weekly-learning-goal" aria-labelledby="learning-goal-title">
+                        <p class="eyebrow">Learning preferences</p>
+                        <h2 id="learning-goal-title">Weekly learning goal</h2>
+                        <p class="profile-panel-copy">Choose a target for estimated lesson minutes completed each week. You can also <a href="/saved-courses">manage your saved courses</a>.</p>
+                        <form class="auth-form profile-form" action="/profile/learning-goal" method="POST">
+                            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                            <label for="weekly-learning-goal-input">Lesson minutes per week</label>
+                            <input id="weekly-learning-goal-input" type="number" name="weeklyLearningGoalMinutes"
+                                value="<%= account.weeklyLearningGoalMinutes || 300 %>" min="30" max="1680" step="30" required>
+                            <p class="password-hint">Set a goal from 30 minutes to 28 hours per week.</p>
+                            <button class="enroll-button" type="submit">Save weekly goal <span aria-hidden="true">→</span></button>
+                        </form>
+                    </section>
+                <% } %>
+
                 <section class="profile-security" aria-labelledby="profile-security-title">
                     <span class="security-icon" aria-hidden="true">✓</span>
                     <div>

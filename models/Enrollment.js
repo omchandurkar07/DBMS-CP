@@ -23,6 +23,18 @@ const enrollmentSchema = new mongoose.Schema({
         ref: 'Course',
         required: true
     },
+    completedLessons: [{
+        type: mongoose.Schema.Types.ObjectId
+    }],
+    lastLesson: {
+        type: mongoose.Schema.Types.ObjectId
+    },
+    lastActivityAt: {
+        type: Date
+    },
+    completedAt: {
+        type: Date
+    },
     enrolledAt: {
         type: Date,
         default: Date.now
@@ -30,5 +42,6 @@ const enrollmentSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 enrollmentSchema.index({ course: 1, studentEmail: 1 }, { unique: true });
+enrollmentSchema.index({ studentAccount: 1, lastActivityAt: -1, enrolledAt: -1 });
 
 module.exports = mongoose.model('Enrollment', enrollmentSchema);

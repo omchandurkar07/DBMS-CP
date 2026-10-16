@@ -1,5 +1,54 @@
 const mongoose = require('mongoose');
 
+const lessonSchema = new mongoose.Schema({
+    title: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 120
+    },
+    summary: {
+        type: String,
+        trim: true,
+        maxlength: 500,
+        default: ''
+    },
+    content: {
+        type: String,
+        trim: true,
+        maxlength: 20000,
+        default: ''
+    },
+    videoUrl: {
+        type: String,
+        trim: true,
+        maxlength: 500,
+        default: ''
+    },
+    durationMinutes: {
+        type: Number,
+        required: true,
+        min: 1,
+        max: 600
+    }
+});
+
+const moduleSchema = new mongoose.Schema({
+    title: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 120
+    },
+    lessons: {
+        type: [lessonSchema],
+        validate: {
+            validator: (lessons) => lessons.length > 0,
+            message: 'Each module must contain at least one lesson.'
+        }
+    }
+});
+
 const courseSchema = new mongoose.Schema({
     code: {
         type: String,
@@ -39,6 +88,10 @@ const courseSchema = new mongoose.Schema({
         trim: true,
         maxlength: 40
     },
+    modules: {
+        type: [moduleSchema],
+        default: []
+    },
     capacity: {
         type: Number,
         required: true,
@@ -61,5 +114,9 @@ const courseSchema = new mongoose.Schema({
         default: true
     }
 }, { timestamps: true });
+
+courseSchema.index({ isActive: 1, title: 1 });
+courseSchema.index({ isActive: 1, category: 1, title: 1 });
+courseSchema.index({ isActive: 1, createdAt: -1, title: 1 });
 
 module.exports = mongoose.model('Course', courseSchema);

@@ -19,6 +19,101 @@
         });
     }
 
+    const courseCurriculum = document.querySelector('[data-course-curriculum]');
+    if (courseCurriculum) {
+        const moduleList = courseCurriculum.querySelector('[data-module-list]');
+        const moduleTemplate = document.querySelector('[data-module-template]');
+        const lessonTemplate = document.querySelector('[data-lesson-template]');
+        const durationSummary = courseCurriculum.querySelector('[data-duration-summary]');
+
+        const updateCurriculumIndexes = () => {
+            const modules = Array.from(moduleList.querySelectorAll('[data-curriculum-module]'));
+            modules.forEach((module, moduleIndex) => {
+                module.querySelector('[data-module-heading]').textContent = `Module ${moduleIndex + 1}`;
+                module.querySelectorAll('[data-curriculum-field]').forEach((field) => {
+                    const fieldName = field.dataset.field;
+                    const lesson = field.closest('[data-curriculum-lesson]');
+                    if (lesson) {
+                        const lessonIndex = Array.from(
+                            module.querySelectorAll('[data-curriculum-lesson]')
+                        ).indexOf(lesson);
+                        field.name = `modules[${moduleIndex}][lessons][${lessonIndex}][${fieldName}]`;
+                        if (field.type !== 'hidden') {
+                            field.id = `module-${moduleIndex}-lesson-${lessonIndex}-${fieldName}`;
+                            const label = field.closest('.course-editor-field').querySelector('label');
+                            label.htmlFor = field.id;
+                        }
+                    } else {
+                        field.name = `modules[${moduleIndex}][${fieldName}]`;
+                        if (fieldName === 'title') {
+                            field.id = `module-${moduleIndex}-title`;
+                            module.querySelector('label[data-label-for="title"]').htmlFor = field.id;
+                        }
+                    }
+                });
+                module.querySelectorAll('[data-curriculum-lesson]').forEach((lesson, lessonIndex) => {
+                    lesson.querySelector('h4').textContent = `Lesson ${lessonIndex + 1}`;
+                });
+            });
+
+            if (durationSummary) {
+                const totalMinutes = Array.from(moduleList.querySelectorAll('[data-field="durationMinutes"]'))
+                    .reduce((total, field) => total + (Number.parseInt(field.value, 10) || 0), 0);
+                if (totalMinutes > 0) {
+                    durationSummary.textContent = totalMinutes >= 60
+                        ? `${Number((totalMinutes / 60).toFixed(1))} hours`
+                        : `${totalMinutes} minutes`;
+                }
+            }
+        };
+
+        const addLesson = (module) => {
+            const lesson = lessonTemplate.content.firstElementChild.cloneNode(true);
+            module.querySelector('[data-lesson-list]').append(lesson);
+            updateCurriculumIndexes();
+            lesson.querySelector('[data-field="title"]').focus();
+        };
+
+        courseCurriculum.addEventListener('click', (event) => {
+            const addModuleButton = event.target.closest('[data-add-module]');
+            const addLessonButton = event.target.closest('[data-add-lesson]');
+            const removeModuleButton = event.target.closest('[data-remove-module]');
+            const removeLessonButton = event.target.closest('[data-remove-lesson]');
+            const moveUpButton = event.target.closest('[data-move-up]');
+            const moveDownButton = event.target.closest('[data-move-down]');
+
+            if (addModuleButton) {
+                const module = moduleTemplate.content.firstElementChild.cloneNode(true);
+                moduleList.append(module);
+                addLesson(module);
+                module.querySelector('[data-field="title"]').focus();
+            } else if (addLessonButton) {
+                addLesson(addLessonButton.closest('[data-curriculum-module]'));
+            } else if (removeModuleButton) {
+                removeModuleButton.closest('[data-curriculum-module]').remove();
+                updateCurriculumIndexes();
+            } else if (removeLessonButton) {
+                removeLessonButton.closest('[data-curriculum-lesson]').remove();
+                updateCurriculumIndexes();
+            } else if (moveUpButton || moveDownButton) {
+                const lesson = event.target.closest('[data-curriculum-lesson]');
+                const item = lesson || event.target.closest('[data-curriculum-module]');
+                const adjacent = moveUpButton ? item.previousElementSibling : item.nextElementSibling;
+                if (adjacent) {
+                    item.parentElement.insertBefore(item, moveUpButton ? adjacent : adjacent.nextElementSibling);
+                    updateCurriculumIndexes();
+                }
+            }
+        });
+
+        courseCurriculum.addEventListener('input', (event) => {
+            if (event.target.matches('[data-field="durationMinutes"]')) {
+                updateCurriculumIndexes();
+            }
+        });
+        updateCurriculumIndexes();
+    }
+
     if (video && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         video.pause();
     }
@@ -288,19 +383,25 @@
     let favorites = new Set();
     let favoritesOnly = false;
     let storageAvailable = true;
+    const serverBackedFavorites = tools.dataset.persisted === 'true';
+    let savedCourseCount = Number.parseInt(tools.dataset.savedCourseCount, 10) || 0;
 
-    try {
-        const storedFavorites = window.localStorage.getItem(storageKey);
-        if (storedFavorites) {
-            const parsedFavorites = JSON.parse(storedFavorites);
-            if (!Array.isArray(parsedFavorites) || !parsedFavorites.every((id) => typeof id === 'string')) {
-                throw new Error('Saved courses data is invalid.');
+    if (serverBackedFavorites) {
+        favorites = new Set(tools.dataset.savedCourseIds.split(',').filter(Boolean));
+    } else {
+        try {
+            const storedFavorites = window.localStorage.getItem(storageKey);
+            if (storedFavorites) {
+                const parsedFavorites = JSON.parse(storedFavorites);
+                if (!Array.isArray(parsedFavorites) || !parsedFavorites.every((id) => typeof id === 'string')) {
+                    throw new Error('Saved courses data is invalid.');
+                }
+                favorites = new Set(parsedFavorites);
             }
-            favorites = new Set(parsedFavorites);
+        } catch {
+            storageAvailable = false;
+            summary.textContent = 'Saved courses are unavailable in this browser. You can still save courses for this visit.';
         }
-    } catch {
-        storageAvailable = false;
-        summary.textContent = 'Saved courses are unavailable in this browser. You can still save courses for this visit.';
     }
 
     tools.hidden = false;
@@ -324,21 +425,50 @@
 
         filterButton.setAttribute('aria-pressed', String(favoritesOnly));
         filterLabel.textContent = favoritesOnly ? 'Show all courses' : 'Show saved courses';
-        favoriteCount.textContent = String(favorites.size);
+        favoriteCount.textContent = String(serverBackedFavorites ? savedCourseCount : favorites.size);
         emptyState.hidden = !favoritesOnly || visibleCount > 0;
-        if (storageAvailable) {
+        if (serverBackedFavorites) {
+            summary.textContent = `${savedCourseCount} saved in your wishlist · ${visibleCount} of ${cards.length} courses shown`;
+        } else if (storageAvailable) {
             summary.textContent = `${visibleCount} of ${cards.length} courses shown`;
         }
     };
 
     favoriteButtons.forEach((button) => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
             const nextFavorites = new Set(favorites);
             const courseId = button.dataset.courseId;
-            if (nextFavorites.has(courseId)) {
+            const isSaved = nextFavorites.has(courseId);
+            if (isSaved) {
                 nextFavorites.delete(courseId);
             } else {
                 nextFavorites.add(courseId);
+            }
+
+            if (serverBackedFavorites) {
+                button.disabled = true;
+                try {
+                    const response = await fetch(`/saved-courses/${encodeURIComponent(courseId)}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Accept: 'application/json'
+                        },
+                        body: JSON.stringify({ _csrf: tools.dataset.csrf, saved: !isSaved })
+                    });
+                    const result = await response.json();
+                    if (!response.ok) {
+                        throw new Error(result.error || 'The wishlist could not be updated.');
+                    }
+                    favorites = nextFavorites;
+                    savedCourseCount = result.savedCourseCount;
+                    renderFavorites();
+                } catch {
+                    summary.textContent = 'Could not update your wishlist. Check your connection and try again.';
+                } finally {
+                    button.disabled = false;
+                }
+                return;
             }
 
             if (storageAvailable) {

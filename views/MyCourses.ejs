@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Track course progress and continue your lessons in CourseHub.">
+    <title>CourseHub | My Courses</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <%- include('./components/header') %>
+    <main>
+        <section class="page-banner">
+            <p class="eyebrow">Your learning space</p>
+            <h1>My courses</h1>
+            <p>Track your progress and continue learning from your last lesson.</p>
+        </section>
+        <% if (notice) { %>
+            <div class="notice <%= notice.type %>" role="status"><%= notice.message %></div>
+        <% } %>
+        <section class="content-section my-courses-section" aria-labelledby="my-courses-title">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Your library</p>
+                    <h2 id="my-courses-title"><%= status === 'completed' ? 'Completed courses' : status === 'in-progress' ? 'In-progress courses' : 'All your courses' %></h2>
+                </div>
+                <a class="back-link" href="/my-learning">← Student dashboard</a>
+            </div>
+            <nav class="course-status-tabs" aria-label="Filter your courses">
+                <a class="<%= status === 'all' ? 'is-active' : '' %>" href="/my-courses">All</a>
+                <a class="<%= status === 'in-progress' ? 'is-active' : '' %>" href="/my-courses?status=in-progress">In progress</a>
+                <a class="<%= status === 'completed' ? 'is-active' : '' %>" href="/my-courses?status=completed">Completed</a>
+            </nav>
+            <% if (enrollments.length === 0) { %>
+                <div class="empty-state">
+                    <h3><%= status === 'completed' ? 'No completed courses yet' : status === 'in-progress' ? 'No courses in progress' : 'Your course list is empty' %></h3>
+                    <p>Browse the catalog and enroll in a course to start learning.</p>
+                    <a class="course-link dashboard-browse-link" href="/courses">Browse courses <span aria-hidden="true">→</span></a>
+                </div>
+            <% } else { %>
+                <div class="student-course-grid">
+                    <% enrollments.forEach((enrollment) => { %>
+                        <% if (enrollment.course) { %>
+                            <article class="student-course-card">
+                                <%- include('./components/course-photo', { course: enrollment.course }) %>
+                                <p class="eyebrow"><%= enrollment.progress === 100 ? 'Completed' : 'In progress' %></p>
+                                <h3><%= enrollment.course.title %></h3>
+                                <p class="student-course-meta"><%= enrollment.course.category %> · <%= enrollment.course.instructor %></p>
+                                <div class="progress-label">
+                                    <span>Course progress</span>
+                                    <strong><%= enrollment.progress %>%</strong>
+                                </div>
+                                <progress class="course-progress" value="<%= enrollment.progress %>" max="100" aria-label="<%= enrollment.progress %>% complete in <%= enrollment.course.title %>"><%= enrollment.progress %>%</progress>
+                                <p class="student-course-meta"><%= enrollment.completedLessonCount %> of <%= enrollment.lessonCount %> lessons completed</p>
+                                <a class="course-link" href="<%= enrollment.continueUrl %>">
+                                    <%= enrollment.progress === 100 ? 'Review course' : enrollment.lessonCount ? 'Continue learning' : 'View course' %>
+                                    <span aria-hidden="true">→</span>
+                                </a>
+                            </article>
+                        <% } %>
+                    <% }); %>
+                </div>
+            <% } %>
+        </section>
+    </main>
+    <%- include('./components/footer') %>
+</body>
+</html>

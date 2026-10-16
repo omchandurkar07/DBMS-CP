@@ -31,6 +31,14 @@
                                 <p>This course is no longer in the catalog.</p>
                             <% } %>
                         </div>
+                        <% if (enrollment.course) { %>
+                            <div class="enrollment-progress">
+                                <div class="progress-label"><span>Progress</span><strong><%= enrollment.progress %>%</strong></div>
+                                <progress class="course-progress" value="<%= enrollment.progress %>" max="100"
+                                    aria-label="<%= enrollment.progress %>% complete in <%= enrollment.course.title %>"><%= enrollment.progress %>%</progress>
+                                <a href="<%= enrollment.continueUrl %>"><%= enrollment.progress === 100 ? 'Review course' : enrollment.lessonCount ? 'Continue learning' : 'View course' %> →</a>
+                            </div>
+                        <% } %>
                         <time datetime="<%= enrollment.enrolledAt.toISOString() %>">
                             Enrolled <%= enrollment.enrolledAt.toLocaleDateString() %>
                         </time>

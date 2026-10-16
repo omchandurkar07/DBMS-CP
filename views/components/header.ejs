@@ -19,7 +19,9 @@
             <% } else if (currentUser.role === 'teacher') { %>
                 <a href="/teacher">Teaching</a>
             <% } else { %>
-                <a href="/my-learning">My learning</a>
+                <a href="/my-learning">Dashboard</a>
+                <a href="/my-courses">My courses</a>
+                <a href="/saved-courses">Saved</a>
             <% } %>
             <a href="/profile">Profile</a>
             <span class="nav-greeting">Hi, <%= currentUser.name %></span>
