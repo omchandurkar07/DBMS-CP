@@ -35,14 +35,20 @@
                 <% if (currentUser) { %>
                     <p>Enroll as <strong><%= currentUser.name %></strong> (<%= currentUser.email %>).</p>
                 <% } else { %>
-                    <p>Sign in or create a student account to enroll and keep your courses together.</p>
+                    <p class="enroll-panel-copy">Join the class in a few steps. Sign in to continue, or create a free student account.</p>
                 <% } %>
                 <% if (course.enrollmentCount >= course.capacity) { %>
                     <button class="enroll-button" type="button" disabled>Course is full</button>
                 <% } else if (!currentUser) { %>
-                    <a class="enroll-button auth-enroll-link" href="/login?next=<%= encodeURIComponent(`/courses/${course._id}`) %>">
-                        Sign in to enroll <span aria-hidden="true">→</span>
-                    </a>
+                    <div class="enroll-auth-actions">
+                        <a class="enroll-button auth-enroll-link" href="/login?next=<%= encodeURIComponent(`/courses/${course._id}`) %>">
+                            <span>Sign in to enroll</span><span aria-hidden="true">→</span>
+                        </a>
+                        <p class="enroll-signup-prompt">
+                            New to CourseHub?
+                            <a href="/signup?next=<%= encodeURIComponent(`/courses/${course._id}`) %>">Create a student account</a>
+                        </p>
+                    </div>
                 <% } else { %>
                     <form class="enroll-form" action="/enroll" method="POST">
                         <input type="hidden" name="courseId" value="<%= course._id %>">

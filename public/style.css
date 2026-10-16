@@ -965,6 +965,47 @@ a {
     width: 100%;
 }
 
+.enroll-panel .enroll-auth-actions {
+    display: grid;
+    gap: 13px;
+}
+
+.enroll-panel .enroll-auth-actions .enroll-button {
+    min-height: 48px;
+    padding: 0 16px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, #a6532f, #bd7042);
+    box-shadow: 0 8px 18px rgb(166 83 47 / 18%);
+    font-size: 0.88rem;
+    transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.enroll-panel .enroll-auth-actions .enroll-button:hover,
+.enroll-panel .enroll-auth-actions .enroll-button:focus-visible {
+    background: linear-gradient(135deg, #914525, #a85c35);
+    box-shadow: 0 11px 22px rgb(166 83 47 / 24%);
+    transform: translateY(-1px);
+}
+
+.enroll-signup-prompt {
+    margin: 0;
+    color: #777067;
+    font-size: 0.78rem;
+    text-align: center;
+}
+
+.enroll-signup-prompt a {
+    color: #a6532f;
+    font-weight: 750;
+    text-decoration: none;
+}
+
+.enroll-signup-prompt a:hover,
+.enroll-signup-prompt a:focus-visible {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
 .back-link {
     margin-top: 19px;
     display: inline-block;
