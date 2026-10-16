@@ -10,6 +10,7 @@ create an account, enroll, and keep track of their learning.
 - View course details, including instructor, duration, enrollment, and capacity.
 - Compare up to three courses from the catalog.
 - Sign up, sign in, update a profile, and sign out.
+- Sign up and sign in as a teacher to manage courses from the teaching dashboard.
 - Enroll in courses and view enrollments on the **My learning** page.
 - Give teachers a dashboard to manage their own courses and review platform-wide totals.
 - Give admins an overview of accounts, courses, and enrollments, with course-management controls.
@@ -40,14 +41,16 @@ create an account, enroll, and keep track of their learning.
 
    Replace the URI with your database connection string if you use MongoDB
    Atlas. `MONGO_URI` is required. `PORT` is optional and defaults to `8080`.
-   To grant a role, first create the account, verify its identity, and add its
-   MongoDB `_id` to `ADMIN_ACCOUNT_IDS` or `TEACHER_ACCOUNT_IDS`. Find an
+   Teacher signup is available at `/teacher/signup` and immediately grants the
+   teacher role; anyone can register as a teacher. To grant admin access, first
+   create the account, verify its identity, and add its MongoDB `_id` to
+   `ADMIN_ACCOUNT_IDS`. Existing accounts can also be granted teacher access by
+   adding their `_id` to `TEACHER_ACCOUNT_IDS`. Find an
    account ID in MongoDB with
    `db.studentaccounts.findOne({ email: "admin@example.com" }, { _id: 1 })`.
    Separate multiple IDs with commas. Admin takes precedence if an ID appears
-   in both lists. Accounts not listed in either setting have the student role.
-   Restart the app after changing role configuration. Roles are deliberately
-   not selectable during public signup.
+   in both lists. The normal `/signup` route creates student accounts. Restart
+   the app after changing role configuration.
 
 3. Start the application:
 
@@ -76,6 +79,8 @@ courses if they are not already present. Existing course records are retained.
 | `GET /courses/:courseId` | Course details |
 | `GET /signup` and `POST /signup` | Create an account |
 | `GET /login` and `POST /login` | Sign in |
+| `GET /teacher/signup` and `POST /teacher/signup` | Create a teacher account |
+| `GET /teacher/login` and `POST /teacher/login` | Sign in as a teacher |
 | `POST /logout` | Sign out |
 | `GET /dashboard` | Redirect to the signed-in user's role-specific dashboard |
 | `GET /profile` and `POST /profile` | View and update the signed-in profile |
@@ -107,7 +112,7 @@ deleting its enrollment history.
 
 - **Course** — course code, title, category, instructor, description, duration,
   capacity, creator reference, and active status.
-- **StudentAccount** — student name, unique email, and password hash and salt.
+- **StudentAccount** — name, unique email, password hash and salt, and student/teacher role.
 - **StudentSession** — hashed session token, account reference, and expiration.
 - **Enrollment** — student and course references, enrollment date, and a unique
   course/email pair to prevent duplicate enrollments.

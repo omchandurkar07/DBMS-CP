@@ -22,6 +22,12 @@ const studentAccountSchema = new mongoose.Schema({
     passwordSalt: {
         type: String,
         required: true
+    },
+    role: {
+        type: String,
+        enum: ['student', 'teacher'],
+        default: 'student',
+        required: true
     }
 }, { timestamps: true });
 

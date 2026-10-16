@@ -52,15 +52,15 @@ function getNotice(req) {
     return notices[status] || null;
 }
 
-function getConfiguredRole(accountId) {
-    const normalizedId = accountId.toString().toLowerCase();
+function getConfiguredRole(account) {
+    const normalizedId = account._id.toString().toLowerCase();
     if (adminAccountIds.has(normalizedId)) {
         return 'admin';
     }
     if (teacherAccountIds.has(normalizedId)) {
         return 'teacher';
     }
-    return 'student';
+    return account.role || 'student';
 }
 
 function escapeRegex(value) {
@@ -212,10 +212,10 @@ app.use(async (req, res, next) => {
         }).lean();
         if (session) {
             const account = await StudentAccount.findById(session.account)
-                .select('_id name email')
+                .select('_id name email role')
                 .lean();
             if (account) {
-                const user = { ...account, role: getConfiguredRole(account._id) };
+                const user = { ...account, role: getConfiguredRole(account) };
                 req.user = user;
                 res.locals.currentUser = user;
             } else {
@@ -229,88 +229,104 @@ app.use(async (req, res, next) => {
     return next();
 });
 
-app.get('/signup', (req, res) => {
+function renderAuthPage(req, res, mode, authRole, authError = '') {
     if (req.user) {
         return res.redirect(safeNextPath(req.query.next));
     }
     return res.render('Auth.ejs', {
-        mode: 'signup',
+        mode,
+        authRole,
         nextPath: safeNextPath(req.query.next),
-        authError: typeof req.query.error === 'string' ? req.query.error : ''
+        authError: authError || (typeof req.query.error === 'string' ? req.query.error : '')
     });
-});
+}
 
-app.post('/signup', requireCsrf, async (req, res) => {
-    const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
-    const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
-    const password = typeof req.body.password === 'string' ? req.body.password : '';
-    const nextPath = safeNextPath(req.body.next);
+function createSignupHandler(authRole) {
+    return async (req, res) => {
+        const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+        const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+        const password = typeof req.body.password === 'string' ? req.body.password : '';
+        const nextPath = safeNextPath(req.body.next);
 
-    if (!name || name.length > 80 || !emailPattern.test(email) || email.length > 254 ||
-        password.length < 8 || password.length > 128) {
-        return res.status(400).render('Auth.ejs', {
-            mode: 'signup',
-            nextPath,
-            authError: 'Enter a name, a valid email, and a password between 8 and 128 characters.'
-        });
-    }
-
-    const passwordSalt = randomBytes(16).toString('hex');
-    const passwordHash = (await scryptAsync(password, passwordSalt, 64)).toString('hex');
-    let account;
-    try {
-        account = await StudentAccount.create({ name, email, passwordHash, passwordSalt });
-    } catch (error) {
-        if (error.code === 11000) {
-            return res.status(409).render('Auth.ejs', {
+        if (!name || name.length > 80 || !emailPattern.test(email) || email.length > 254 ||
+            password.length < 8 || password.length > 128) {
+            return res.status(400).render('Auth.ejs', {
                 mode: 'signup',
+                authRole,
                 nextPath,
-                authError: 'An account with that email already exists. Sign in instead.'
+                authError: 'Enter a name, a valid email, and a password between 8 and 128 characters.'
             });
         }
-        throw error;
-    }
 
-    await createStudentSession(account, res);
-    return res.redirect(nextPath);
-});
+        const passwordSalt = randomBytes(16).toString('hex');
+        const passwordHash = (await scryptAsync(password, passwordSalt, 64)).toString('hex');
+        let account;
+        try {
+            account = await StudentAccount.create({ name, email, passwordHash, passwordSalt, role: authRole });
+        } catch (error) {
+            if (error.code === 11000) {
+                return res.status(409).render('Auth.ejs', {
+                    mode: 'signup',
+                    authRole,
+                    nextPath,
+                    authError: 'An account with that email already exists. Sign in instead.'
+                });
+            }
+            throw error;
+        }
 
-app.get('/login', (req, res) => {
-    if (req.user) {
-        return res.redirect(safeNextPath(req.query.next));
-    }
-    return res.render('Auth.ejs', {
-        mode: 'login',
-        nextPath: safeNextPath(req.query.next),
-        authError: typeof req.query.error === 'string' ? req.query.error : ''
-    });
-});
+        await createStudentSession(account, res);
+        return res.redirect(nextPath);
+    };
+}
 
-app.post('/login', requireCsrf, async (req, res) => {
-    const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
-    const password = typeof req.body.password === 'string' ? req.body.password : '';
-    const nextPath = safeNextPath(req.body.next);
-    const account = emailPattern.test(email) && email.length <= 254 && password.length <= 128
-        ? await StudentAccount.findOne({ email })
-        : null;
-    const attemptedHash = await scryptAsync(
-        password.slice(0, 128),
-        account ? account.passwordSalt : 'coursehub-login-dummy-salt',
-        64
-    );
-    const storedHash = account ? Buffer.from(account.passwordHash, 'hex') : Buffer.alloc(64);
-    if (!account || storedHash.length !== attemptedHash.length ||
-        !timingSafeEqual(storedHash, attemptedHash)) {
-        return res.status(401).render('Auth.ejs', {
-            mode: 'login',
-            nextPath,
-            authError: 'Email or password is incorrect.'
-        });
-    }
+function createLoginHandler(authRole) {
+    return async (req, res) => {
+        const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+        const password = typeof req.body.password === 'string' ? req.body.password : '';
+        const nextPath = safeNextPath(req.body.next);
+        const account = emailPattern.test(email) && email.length <= 254 && password.length <= 128
+            ? await StudentAccount.findOne({ email })
+            : null;
+        const attemptedHash = await scryptAsync(
+            password.slice(0, 128),
+            account ? account.passwordSalt : 'coursehub-login-dummy-salt',
+            64
+        );
+        const storedHash = account ? Buffer.from(account.passwordHash, 'hex') : Buffer.alloc(64);
+        if (!account || storedHash.length !== attemptedHash.length ||
+            !timingSafeEqual(storedHash, attemptedHash)) {
+            return res.status(401).render('Auth.ejs', {
+                mode: 'login',
+                authRole,
+                nextPath,
+                authError: 'Email or password is incorrect.'
+            });
+        }
 
-    await createStudentSession(account, res);
-    return res.redirect(nextPath);
-});
+        if (authRole === 'teacher' && getConfiguredRole(account) !== 'teacher') {
+            return res.status(403).render('Auth.ejs', {
+                mode: 'login',
+                authRole,
+                nextPath,
+                authError: 'This account does not have teacher access. Create a teacher account or use student sign-in.'
+            });
+        }
+
+        await createStudentSession(account, res);
+        return res.redirect(nextPath);
+    };
+}
+
+app.get('/signup', (req, res) => renderAuthPage(req, res, 'signup', 'student'));
+app.get('/teacher/signup', (req, res) => renderAuthPage(req, res, 'signup', 'teacher'));
+app.post('/signup', requireCsrf, createSignupHandler('student'));
+app.post('/teacher/signup', requireCsrf, createSignupHandler('teacher'));
+
+app.get('/login', (req, res) => renderAuthPage(req, res, 'login', 'student'));
+app.get('/teacher/login', (req, res) => renderAuthPage(req, res, 'login', 'teacher'));
+app.post('/login', requireCsrf, createLoginHandler('student'));
+app.post('/teacher/login', requireCsrf, createLoginHandler('teacher'));
 
 app.get('/dashboard', requireAuth, (req, res) => {
     if (req.user.role === 'admin') {
@@ -477,7 +493,7 @@ app.get('/teacher', requireAuth, requireRole('teacher'), async (req, res) => {
 
 app.get('/admin', requireAuth, requireRole('admin'), async (req, res) => {
     const [accounts, courses, enrollments] = await Promise.all([
-        StudentAccount.find().select('_id name email createdAt').sort({ createdAt: -1 }).lean(),
+        StudentAccount.find().select('_id name email role createdAt').sort({ createdAt: -1 }).lean(),
         getCoursesWithEnrollmentCounts({}, true),
         Enrollment.find()
             .populate('studentAccount', 'name email')
@@ -489,7 +505,7 @@ app.get('/admin', requireAuth, requireRole('admin'), async (req, res) => {
     return res.render('AdminDashboard.ejs', {
         accounts: accounts.map((account) => ({
             ...account,
-            role: getConfiguredRole(account._id)
+            role: getConfiguredRole(account)
         })),
         courses,
         enrollments,

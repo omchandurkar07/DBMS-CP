@@ -3,25 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="<%= mode === 'signup' ? 'Create a CourseHub student account.' : 'Sign in to your CourseHub student account.' %>">
-    <title>CourseHub | <%= mode === 'signup' ? 'Create account' : 'Sign in' %></title>
+    <meta name="description" content="<%= mode === 'signup' ? `Create a CourseHub ${authRole} account.` : `Sign in to your CourseHub ${authRole} account.` %>">
+    <title>CourseHub | <%= authRole === 'teacher' ? 'Teacher ' : '' %><%= mode === 'signup' ? 'Create account' : 'Sign in' %></title>
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
     <%- include('./components/header') %>
     <main class="auth-page">
         <section class="auth-card" aria-labelledby="auth-title">
-            <p class="eyebrow"><%= mode === 'signup' ? 'Start your learning journey' : 'Welcome back' %></p>
-            <h1 id="auth-title"><%= mode === 'signup' ? 'Create your account' : 'Sign in to CourseHub' %></h1>
-            <p class="auth-intro"><%= mode === 'signup'
-                ? 'One account keeps your course enrollments together.'
-                : 'Sign in to enroll in courses and open your learning dashboard.' %></p>
+            <p class="eyebrow"><%= authRole === 'teacher' ? 'Teacher workspace' : (mode === 'signup' ? 'Start your learning journey' : 'Welcome back') %></p>
+            <h1 id="auth-title"><%= mode === 'signup' ? `Create your ${authRole} account` : `Sign in to CourseHub${authRole === 'teacher' ? ' as a teacher' : ''}` %></h1>
+            <p class="auth-intro"><%= authRole === 'teacher'
+                ? (mode === 'signup' ? 'Create a teacher account to manage courses from your teaching dashboard.' : 'Sign in to manage your courses and open your teaching dashboard.')
+                : (mode === 'signup' ? 'One account keeps your course enrollments together.' : 'Sign in to enroll in courses and open your learning dashboard.') %></p>
 
             <% if (authError) { %>
                 <p class="auth-error" role="alert"><%= authError %></p>
             <% } %>
 
-            <form class="auth-form" action="/<%= mode %>" method="POST">
+            <form class="auth-form" action="/<%= authRole === 'teacher' ? 'teacher/' : '' %><%= mode %>" method="POST">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                 <input type="hidden" name="next" value="<%= nextPath %>">
                 <% if (mode === 'signup') { %>
@@ -29,7 +29,7 @@
                     <input id="auth-name" type="text" name="name" autocomplete="name"
                         maxlength="80" required>
                 <% } %>
-                <label for="auth-email">Student email</label>
+                <label for="auth-email"><%= authRole === 'teacher' ? 'Teacher email' : 'Student email' %></label>
                 <input id="auth-email" type="email" name="email" autocomplete="email"
                     maxlength="254" required>
                 <label for="auth-password">Password</label>
@@ -50,11 +50,16 @@
             </form>
 
             <p class="auth-switch">
-                <%= mode === 'signup' ? 'Already have an account?' : 'New to CourseHub?' %>
-                <a href="/<%= mode === 'signup' ? 'login' : 'signup' %>?next=<%= encodeURIComponent(nextPath) %>">
-                    <%= mode === 'signup' ? 'Sign in' : 'Create an account' %>
+                <%= mode === 'signup' ? 'Already have an account?' : (authRole === 'teacher' ? 'Need a teacher account?' : 'New to CourseHub?') %>
+                <a href="/<%= authRole === 'teacher' ? 'teacher/' : '' %><%= mode === 'signup' ? 'login' : 'signup' %>?next=<%= encodeURIComponent(nextPath) %>">
+                    <%= mode === 'signup' ? 'Sign in' : (authRole === 'teacher' ? 'Create a teacher account' : 'Create an account') %>
                 </a>
             </p>
+            <% if (authRole === 'teacher') { %>
+                <p class="auth-switch"><a href="/login?next=<%= encodeURIComponent(nextPath) %>">Sign in as a student</a></p>
+            <% } else { %>
+                <p class="auth-switch"><a href="/teacher/login?next=<%= encodeURIComponent(nextPath) %>">Teacher sign in or sign up</a></p>
+            <% } %>
         </section>
     </main>
     <%- include('./components/footer') %>
