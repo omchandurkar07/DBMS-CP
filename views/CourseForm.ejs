@@ -20,13 +20,9 @@
                 <p class="auth-error" role="alert"><%= error %></p>
             <% } %>
 
-            <form class="course-editor-form" action="<%= course._id ? `/manage/courses/${course._id}` : '/manage/courses' %>" method="POST">
+            <form class="course-editor-form" action="<%= course._id ? `/manage/courses/${course._id}` : '/manage/courses' %>" method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                 <div class="course-editor-grid">
-                    <div class="course-editor-field">
-                        <label for="course-code">Course code</label>
-                        <input id="course-code" name="code" type="text" maxlength="32" value="<%= course.code || '' %>" required>
-                    </div>
                     <div class="course-editor-field">
                         <label for="course-title">Course title</label>
                         <input id="course-title" name="title" type="text" maxlength="120" value="<%= course.title || '' %>" required>
@@ -58,6 +54,19 @@
                         <label for="course-description">Description</label>
                         <textarea id="course-description" name="description" rows="5" maxlength="500" required><%= course.description || '' %></textarea>
                     </div>
+                    <div class="course-editor-field course-editor-photo">
+                        <label for="course-photo">Course photo <%= course.photoContentType ? '(optional)' : '(required)' %></label>
+                        <% if (course.photoContentType) { %>
+                            <img class="course-photo-preview" data-course-photo-preview
+                                src="/courses/<%= course._id %>/photo?v=<%= course.updatedAt ? course.updatedAt.getTime() : '' %>"
+                                alt="Course photo preview for <%= course.title %>">
+                        <% } else { %>
+                            <img class="course-photo-preview" data-course-photo-preview alt="Selected course photo preview" hidden>
+                        <% } %>
+                        <input id="course-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" data-course-photo-input
+                            <%= course.photoContentType ? '' : 'required' %>>
+                        <p class="password-hint">JPEG, PNG, or WebP; maximum file size 5 MB.</p>
+                    </div>
                 </div>
                 <div class="course-editor-actions">
                     <a class="back-link" href="<%= returnPath %>">Cancel</a>
@@ -67,5 +76,6 @@
         </section>
     </main>
     <%- include('./components/footer') %>
+    <script src="/app.js" defer></script>
 </body>
 </html>

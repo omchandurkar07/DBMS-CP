@@ -1,5 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const multer = require('multer');
 const path = require('path');
 const { promisify } = require('util');
 const { createHash, randomBytes, scrypt, timingSafeEqual } = require('crypto');
@@ -17,6 +18,16 @@ const sessionCookieName = 'coursehub_session';
 const csrfCookieName = 'coursehub_csrf';
 const sessionLifetimeMs = 7 * 24 * 60 * 60 * 1000;
 const scryptAsync = promisify(scrypt);
+const coursePhotoUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 10, fieldSize: 4096, parts: 12 },
+    fileFilter(req, file, callback) {
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+            return callback(new Error('Upload a JPEG, PNG, or WebP image.'));
+        }
+        return callback(null, true);
+    }
+});
 
 function parseConfiguredAccountIds(variableName) {
     const accountIds = (process.env[variableName] || '')
@@ -167,7 +178,7 @@ async function getCoursesWithEnrollmentCounts(courseFilter = {}, includeInactive
     const courseDocuments = await Course.find({
         ...(!includeInactive ? { isActive: true } : {}),
         ...courseFilter
-    }).sort({ title: 1 }).lean();
+    }).select('-photoData').sort({ title: 1 }).lean();
     const enrollmentCounts = await Enrollment.aggregate([
         { $group: { _id: '$course', count: { $sum: 1 } } }
     ]);
@@ -179,6 +190,43 @@ async function getCoursesWithEnrollmentCounts(courseFilter = {}, includeInactive
         ...course,
         enrollmentCount: countByCourse.get(course._id.toString()) || 0
     }));
+}
+
+function parseCoursePhoto(req, res, next) {
+    coursePhotoUpload.single('photo')(req, res, (error) => {
+        if (!error) {
+            return next();
+        }
+        if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+            return res.status(413).send('Course photos must be 5 MB or smaller.');
+        }
+        if (error instanceof multer.MulterError) {
+            return res.status(400).send('The course form contains too many or oversized fields.');
+        }
+        if (error.message === 'Upload a JPEG, PNG, or WebP image.') {
+            return res.status(400).send(error.message);
+        }
+        return next(error);
+    });
+}
+
+function getCoursePhotoContentType(buffer) {
+    if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+        return 'image/png';
+    }
+    if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+        return 'image/jpeg';
+    }
+    if (buffer.length >= 12 && buffer.toString('ascii', 0, 4) === 'RIFF' &&
+        buffer.toString('ascii', 8, 12) === 'WEBP') {
+        return 'image/webp';
+    }
+    return null;
+}
+
+function generateCourseCode(title) {
+    const prefix = title.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 7) || 'COURSE';
+    return `${prefix}-${new mongoose.Types.ObjectId().toString().toUpperCase()}`;
 }
 
 app.set('view engine', 'ejs');
@@ -415,7 +463,6 @@ app.get('/courses', async (req, res) => {
         const searchExpression = new RegExp(escapeRegex(search), 'i');
         courseFilter.$or = [
             { title: searchExpression },
-            { code: searchExpression },
             { category: searchExpression },
             { instructor: searchExpression },
             { description: searchExpression }
@@ -448,7 +495,7 @@ app.get('/courses/:courseId', async (req, res) => {
     const course = await Course.findOne({
         _id: req.params.courseId,
         isActive: true
-    }).lean();
+    }).select('-photoData').lean();
     if (!course) {
         return res.status(404).render('NotFound.ejs');
     }
@@ -460,10 +507,27 @@ app.get('/courses/:courseId', async (req, res) => {
     });
 });
 
+app.get('/courses/:courseId/photo', async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.courseId)) {
+        return res.sendStatus(404);
+    }
+
+    const course = await Course.findById(req.params.courseId)
+        .select('photoData photoContentType')
+        .lean();
+    if (!course || !course.photoData || !course.photoContentType) {
+        return res.sendStatus(404);
+    }
+
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Cache-Control', 'public, max-age=300');
+    return res.type(course.photoContentType).send(course.photoData);
+});
+
 app.get('/my-learning', requireAuth, async (req, res) => {
     const studentEmail = req.user.email;
     const enrollments = await Enrollment.find({ studentAccount: req.user._id })
-        .populate('course', 'title code instructor')
+        .populate('course', 'title category instructor photoContentType')
         .sort({ enrolledAt: -1 })
         .lean();
 
@@ -497,7 +561,7 @@ app.get('/admin', requireAuth, requireRole('admin'), async (req, res) => {
         getCoursesWithEnrollmentCounts({}, true),
         Enrollment.find()
             .populate('studentAccount', 'name email')
-            .populate('course', 'code title')
+            .populate('course', 'title category photoContentType')
             .sort({ enrolledAt: -1 })
             .lean()
     ]);
@@ -518,7 +582,6 @@ function getCourseInput(body, user) {
     const capacityValue = text('capacity');
     const capacity = /^\d+$/.test(capacityValue) ? Number(capacityValue) : NaN;
     const course = {
-        code: text('code').toUpperCase(),
         title: text('title'),
         category: text('category'),
         instructor: user.role === 'admin' ? text('instructor') : user.name,
@@ -527,8 +590,7 @@ function getCourseInput(body, user) {
         capacity
     };
 
-    if (!course.code || course.code.length > 32 ||
-        !course.title || course.title.length > 120 ||
+    if (!course.title || course.title.length > 120 ||
         !course.category || course.category.length > 60 ||
         !course.instructor || course.instructor.length > 80 ||
         !course.description || course.description.length > 500 ||
@@ -553,7 +615,7 @@ async function findManageableCourse(courseId, user) {
     if (user.role !== 'admin') {
         filter.createdBy = user._id;
     }
-    return Course.findOne(filter);
+    return Course.findOne(filter).select('-photoData');
 }
 
 app.get('/manage/courses/new', requireAuth, requireRole('teacher', 'admin'), (req, res) => {
@@ -564,20 +626,36 @@ app.get('/manage/courses/new', requireAuth, requireRole('teacher', 'admin'), (re
     });
 });
 
-app.post('/manage/courses', requireAuth, requireRole('teacher', 'admin'), requireCsrf, async (req, res) => {
+app.post('/manage/courses', requireAuth, requireRole('teacher', 'admin'), parseCoursePhoto, requireCsrf, async (req, res) => {
     const { course, error } = getCourseInput(req.body, req.user);
     const returnPath = courseDashboardPath(req.user);
     if (error) {
         return res.status(400).render('CourseForm.ejs', { course, error, returnPath });
     }
+    const photoContentType = req.file && getCoursePhotoContentType(req.file.buffer);
+    if (!photoContentType) {
+        return res.status(400).render('CourseForm.ejs', {
+            course,
+            error: req.file
+                ? 'The uploaded file is not a valid JPEG, PNG, or WebP image.'
+                : 'Upload a course photo before creating the course.',
+            returnPath
+        });
+    }
 
     try {
-        await Course.create({ ...course, createdBy: req.user._id });
+        await Course.create({
+            ...course,
+            code: generateCourseCode(course.title),
+            photoData: req.file.buffer,
+            photoContentType,
+            createdBy: req.user._id
+        });
     } catch (createError) {
         if (createError.code === 11000) {
             return res.status(409).render('CourseForm.ejs', {
                 course,
-                error: 'A course with that code already exists. Choose a unique course code.',
+                error: 'The course could not be assigned a unique internal identifier. Please try again.',
                 returnPath
             });
         }
@@ -600,7 +678,7 @@ app.get('/manage/courses/:courseId/edit', requireAuth, requireRole('teacher', 'a
     });
 });
 
-app.post('/manage/courses/:courseId', requireAuth, requireRole('teacher', 'admin'), requireCsrf, async (req, res) => {
+app.post('/manage/courses/:courseId', requireAuth, requireRole('teacher', 'admin'), parseCoursePhoto, requireCsrf, async (req, res) => {
     const existingCourse = await findManageableCourse(req.params.courseId, req.user);
     if (!existingCourse) {
         return res.status(404).render('NotFound.ejs');
@@ -610,8 +688,17 @@ app.post('/manage/courses/:courseId', requireAuth, requireRole('teacher', 'admin
     const returnPath = courseDashboardPath(req.user);
     course._id = existingCourse._id;
     course.isActive = existingCourse.isActive;
+    course.photoContentType = existingCourse.photoContentType;
     if (error) {
         return res.status(400).render('CourseForm.ejs', { course, error, returnPath });
+    }
+    const photoContentType = req.file && getCoursePhotoContentType(req.file.buffer);
+    if (req.file && !photoContentType) {
+        return res.status(400).render('CourseForm.ejs', {
+            course,
+            error: 'The uploaded file is not a valid JPEG, PNG, or WebP image.',
+            returnPath
+        });
     }
 
     const enrollmentCount = await Enrollment.countDocuments({ course: existingCourse._id });
@@ -626,6 +713,10 @@ app.post('/manage/courses/:courseId', requireAuth, requireRole('teacher', 'admin
     try {
         const courseFields = { ...course };
         delete courseFields._id;
+        if (req.file) {
+            courseFields.photoData = req.file.buffer;
+            courseFields.photoContentType = photoContentType;
+        }
         await Course.updateOne(
             { _id: existingCourse._id },
             { $set: courseFields },
@@ -635,7 +726,7 @@ app.post('/manage/courses/:courseId', requireAuth, requireRole('teacher', 'admin
         if (updateError.code === 11000) {
             return res.status(409).render('CourseForm.ejs', {
                 course,
-                error: 'A course with that code already exists. Choose a unique course code.',
+                error: 'The course could not be saved. Please try again.',
                 returnPath
             });
         }
@@ -669,7 +760,9 @@ app.post('/enroll', requireAuth, requireCsrf, async (req, res) => {
         return res.redirect('/courses?status=invalid');
     }
 
-    const course = await Course.findOne({ _id: courseId, isActive: true }).lean();
+    const course = await Course.findOne({ _id: courseId, isActive: true })
+        .select('-photoData')
+        .lean();
     if (!course) {
         return res.redirect('/courses?status=course');
     }

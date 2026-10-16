@@ -42,13 +42,10 @@
                 <div class="course-grid featured-grid">
                     <% featuredCourses.forEach((course, index) => { %>
                         <article class="course-card featured-card">
+                            <%- include('./components/course-photo', { course }) %>
                             <div class="course-card-top">
-                                <span class="course-icon course-icon-<%= index % 4 %>" aria-hidden="true">
-                                    <%= ['✦', '⌘', '◈', '✳'][index % 4] %>
-                                </span>
                                 <span class="course-category"><%= course.category %></span>
                             </div>
-                            <p class="course-code"><%= course.code %></p>
                             <h3><%= course.title %></h3>
                             <p class="course-description"><%= course.description %></p>
                             <div class="course-meta">

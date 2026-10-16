@@ -11,6 +11,7 @@ create an account, enroll, and keep track of their learning.
 - Compare up to three courses from the catalog.
 - Sign up, sign in, update a profile, and sign out.
 - Sign up and sign in as a teacher to manage courses from the teaching dashboard.
+- Upload a course photo when creating courses and update it later from the course editor.
 - Enroll in courses and view enrollments on the **My learning** page.
 - Give teachers a dashboard to manage their own courses and review platform-wide totals.
 - Give admins an overview of accounts, courses, and enrollments, with course-management controls.
@@ -77,6 +78,7 @@ courses if they are not already present. Existing course records are retained.
 | `GET /` | Home page and featured courses |
 | `GET /courses` | Course catalog with search and filters |
 | `GET /courses/:courseId` | Course details |
+| `GET /courses/:courseId/photo` | Course photo |
 | `GET /signup` and `POST /signup` | Create an account |
 | `GET /login` and `POST /login` | Sign in |
 | `GET /teacher/signup` and `POST /teacher/signup` | Create a teacher account |
@@ -93,8 +95,12 @@ courses if they are not already present. Existing course records are retained.
 Profile, enrollment, and learning pages require a signed-in account. Teacher
 and administrator routes additionally require the matching configured role.
 Teachers can edit and archive only courses they created; administrators can
-manage any course. Archiving hides a course from the public catalog without
-deleting its enrollment history.
+manage any course. The course editor assigns course codes automatically and
+requires a JPEG, PNG, or WebP photo up to 5 MB when creating a course. Photos
+are stored with the course in MongoDB and shown in the catalog, course details,
+and dashboards. Existing courses without photos use a category placeholder
+until a photo is uploaded. Archiving hides a course from the public catalog
+without deleting its enrollment history.
 
 ## Project structure
 
@@ -110,8 +116,8 @@ deleting its enrollment history.
 
 ## Data models
 
-- **Course** — course code, title, category, instructor, description, duration,
-  capacity, creator reference, and active status.
+- **Course** — internally generated course code, title, category, instructor,
+  description, duration, capacity, optional photo, creator reference, and active status.
 - **StudentAccount** — name, unique email, password hash and salt, and student/teacher role.
 - **StudentSession** — hashed session token, account reference, and expiration.
 - **Enrollment** — student and course references, enrollment date, and a unique

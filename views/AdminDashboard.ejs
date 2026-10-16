@@ -43,7 +43,7 @@
                         <tbody>
                             <% courses.forEach((course) => { %>
                                 <tr>
-                                    <td><strong><%= course.title %></strong><span class="table-secondary"><%= course.code %> · <%= course.category %></span></td>
+                                    <td><%- include('./components/course-photo', { course, photoClass: 'course-photo-dashboard' }) %><strong><%= course.title %></strong><span class="table-secondary"><%= course.category %></span></td>
                                     <td><%= course.instructor %></td>
                                     <td><%= course.enrollmentCount %> / <%= course.capacity %></td>
                                     <td><span class="status-badge <%= course.isActive ? 'status-published' : 'status-archived' %>"><%= course.isActive ? 'Published' : 'Archived' %></span></td>
@@ -107,7 +107,14 @@
                                 <tr>
                                     <td><strong><%= enrollment.studentAccount ? enrollment.studentAccount.name : enrollment.studentName %></strong></td>
                                     <td><%= enrollment.studentAccount ? enrollment.studentAccount.email : enrollment.studentEmail %></td>
-                                    <td><%= enrollment.course ? `${enrollment.course.code} · ${enrollment.course.title}` : 'Course unavailable' %></td>
+                                    <td>
+                                        <% if (enrollment.course) { %>
+                                            <%- include('./components/course-photo', { course: enrollment.course, photoClass: 'course-photo-dashboard' }) %>
+                                            <%= enrollment.course.title %>
+                                        <% } else { %>
+                                            Course unavailable
+                                        <% } %>
+                                    </td>
                                     <td><%= enrollment.enrolledAt.toLocaleDateString() %></td>
                                 </tr>
                             <% }); %>

@@ -1,0 +1,9 @@
+<div class="course-photo <%= typeof photoClass === 'undefined' ? '' : photoClass %><%= course.photoContentType ? '' : ' course-photo-placeholder' %>">
+    <% if (course.photoContentType) { %>
+        <img src="/courses/<%= course._id %>/photo?v=<%= course.updatedAt ? course.updatedAt.getTime() : '' %>"
+            alt="<%= course.title %> course photo" loading="lazy">
+    <% } else { %>
+        <span class="course-photo-mark" aria-hidden="true">✦</span>
+        <span class="course-photo-label"><%= course.category %></span>
+    <% } %>
+</div>

@@ -18,10 +18,18 @@
             <div class="enrollment-list">
                 <% enrollments.forEach((enrollment) => { %>
                     <article class="enrollment-row">
+                        <% if (enrollment.course) { %>
+                            <%- include('./course-photo', { course: enrollment.course, photoClass: 'course-photo-enrollment' }) %>
+                        <% } %>
                         <span class="enrolled-check" aria-hidden="true">✓</span>
                         <div class="enrollment-course">
-                            <h4><%= enrollment.course.title %></h4>
-                            <p><%= enrollment.course.code %> · <%= enrollment.course.instructor %></p>
+                            <% if (enrollment.course) { %>
+                                <h4><%= enrollment.course.title %></h4>
+                                <p><%= enrollment.course.category %> · <%= enrollment.course.instructor %></p>
+                            <% } else { %>
+                                <h4>Course unavailable</h4>
+                                <p>This course is no longer in the catalog.</p>
+                            <% } %>
                         </div>
                         <time datetime="<%= enrollment.enrolledAt.toISOString() %>">
                             Enrolled <%= enrollment.enrolledAt.toLocaleDateString() %>

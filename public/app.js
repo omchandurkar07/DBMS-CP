@@ -1,6 +1,24 @@
 (() => {
     const video = document.querySelector('.hero-video');
 
+    const coursePhotoInput = document.querySelector('[data-course-photo-input]');
+    const coursePhotoPreview = document.querySelector('[data-course-photo-preview]');
+    if (coursePhotoInput && coursePhotoPreview) {
+        let previewUrl = '';
+        coursePhotoInput.addEventListener('change', () => {
+            const [file] = coursePhotoInput.files;
+            if (!file) {
+                return;
+            }
+            if (previewUrl) {
+                URL.revokeObjectURL(previewUrl);
+            }
+            previewUrl = URL.createObjectURL(file);
+            coursePhotoPreview.src = previewUrl;
+            coursePhotoPreview.hidden = false;
+        });
+    }
+
     if (video && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         video.pause();
     }
@@ -65,7 +83,6 @@
             return {
                 id: button.dataset.courseId,
                 title: card.querySelector('h3').textContent.trim(),
-                code: card.querySelector('.course-code').textContent.trim(),
                 category: card.querySelector('.course-category').textContent.trim(),
                 instructor: metadata[0].querySelector('strong').textContent.trim(),
                 duration: metadata[1].querySelector('strong').textContent.trim(),
@@ -130,9 +147,7 @@
                 heading.scope = 'col';
                 const title = document.createElement('strong');
                 title.textContent = course.title;
-                const code = document.createElement('span');
-                code.textContent = course.code;
-                heading.append(title, code);
+                heading.append(title);
                 header.append(heading);
             });
 

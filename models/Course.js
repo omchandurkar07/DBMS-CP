@@ -44,6 +44,13 @@ const courseSchema = new mongoose.Schema({
         required: true,
         min: 1
     },
+    photoData: {
+        type: Buffer
+    },
+    photoContentType: {
+        type: String,
+        enum: ['image/jpeg', 'image/png', 'image/webp']
+    },
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'StudentAccount',

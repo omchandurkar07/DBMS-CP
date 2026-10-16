@@ -10,17 +10,16 @@
 <body>
     <%- include('./components/header') %>
     <main>
-        <div class="breadcrumb"><a href="/courses">Courses</a><span aria-hidden="true">/</span><span><%= course.code %></span></div>
+        <div class="breadcrumb"><a href="/courses">Courses</a><span aria-hidden="true">/</span><span><%= course.title %></span></div>
         <% if (notice) { %>
             <div class="notice <%= notice.type %>" role="status"><%= notice.message %></div>
         <% } %>
         <section class="detail-layout">
             <article class="course-detail-card">
+                <%- include('./components/course-photo', { course, photoClass: 'course-photo-detail' }) %>
                 <div class="course-card-top">
-                    <span class="course-icon course-icon-0" aria-hidden="true">✦</span>
                     <span class="course-category"><%= course.category %></span>
                 </div>
-                <p class="course-code"><%= course.code %></p>
                 <h1><%= course.title %></h1>
                 <p class="detail-description"><%= course.description %></p>
                 <div class="detail-facts">

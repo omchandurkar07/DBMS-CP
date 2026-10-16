@@ -52,7 +52,7 @@
                         <tbody>
                             <% courses.forEach((course) => { %>
                                 <tr>
-                                    <td><strong><%= course.title %></strong><span class="table-secondary"><%= course.code %></span></td>
+                                    <td><%- include('./components/course-photo', { course, photoClass: 'course-photo-dashboard' }) %><strong><%= course.title %></strong></td>
                                     <td><%= course.category %></td>
                                     <td><%= course.enrollmentCount %> / <%= course.capacity %></td>
                                     <td><span class="status-badge <%= course.isActive ? 'status-published' : 'status-archived' %>"><%= course.isActive ? 'Published' : 'Archived' %></span></td>
