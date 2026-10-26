@@ -58,6 +58,36 @@
                                                 <% if (lesson.summary) { %>
                                                     <p><%= lesson.summary %></p>
                                                 <% } %>
+                                                <% const lessonId = lesson._id ? lesson._id.toString() : ''; %>
+                                                <% const lessonMaterials = lessonId ? (materialsByLesson[lessonId] || []) : []; %>
+                                                <% if (lessonMaterials.length > 0) { %>
+                                                    <ul class="learning-material-list" aria-label="Learning materials for <%= lesson.title %>">
+                                                        <% lessonMaterials.forEach((material) => { %>
+                                                            <li>
+                                                                <a href="/courses/<%= course._id %>/materials/<%= material._id %>">
+                                                                    <span aria-hidden="true">↓</span> <%= material.fileName %>
+                                                                </a>
+                                                                <span><%= (material.size / 1024).toFixed(0) %> KB</span>
+                                                                <% if (canManageCourse) { %>
+                                                                    <form action="/manage/courses/<%= course._id %>/materials/<%= material._id %>/delete" method="POST">
+                                                                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                                                                        <button class="material-remove-button" type="submit">Remove</button>
+                                                                    </form>
+                                                                <% } %>
+                                                            </li>
+                                                        <% }); %>
+                                                    </ul>
+                                                <% } %>
+                                                <% if (canManageCourse) { %>
+                                                    <form class="material-upload-form" action="/manage/courses/<%= course._id %>/lessons/<%= lesson._id %>/materials" method="POST" enctype="multipart/form-data">
+                                                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                                                        <label>
+                                                            <span>Add lesson material (PDF, DOCX, PPTX, XLSX, TXT, CSV; up to 10 MB; 20 per lesson, 50 per course)</span>
+                                                            <input type="file" name="material" accept=".pdf,.docx,.pptx,.xlsx,.txt,.csv" required>
+                                                        </label>
+                                                        <button class="material-upload-button" type="submit">Upload material</button>
+                                                    </form>
+                                                <% } %>
                                             </li>
                                         <% }); %>
                                     </ol>

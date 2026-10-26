@@ -33,6 +33,21 @@
             <% } else if (!lesson.videoUrl) { %>
                 <p class="curriculum-empty">Your instructor has not added lesson content yet.</p>
             <% } %>
+            <% if (materials.length > 0) { %>
+                <section class="lesson-materials" aria-labelledby="lesson-materials-title">
+                    <h2 id="lesson-materials-title">Learning materials</h2>
+                    <ul class="learning-material-list">
+                        <% materials.forEach((material) => { %>
+                            <li>
+                                <a href="/courses/<%= course._id %>/materials/<%= material._id %>">
+                                    <span aria-hidden="true">↓</span> <%= material.fileName %>
+                                </a>
+                                <span><%= (material.size / 1024).toFixed(0) %> KB</span>
+                            </li>
+                        <% }); %>
+                    </ul>
+                </section>
+            <% } %>
             <div class="lesson-actions">
                 <% if (completed) { %>
                     <span class="lesson-complete-label">✓ Lesson completed</span>

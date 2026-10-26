@@ -7,6 +7,12 @@ const { promisify } = require('util');
 const { createHash, randomBytes, scrypt, timingSafeEqual } = require('crypto');
 const { rateLimit } = require('express-rate-limit');
 const Course = require('./models/Course');
+const CourseLearningMaterial = require('./models/CourseLearningMaterial');
+const {
+    buildStarterCurriculum,
+    curriculumByCourseCode,
+    isGenericStarterCurriculum
+} = require('./demoCurriculum');
 const Enrollment = require('./models/Enrollment');
 const PasswordResetToken = require('./models/PasswordResetToken');
 const StudentAccount = require('./models/StudentAccount');
@@ -24,6 +30,17 @@ const csrfCookieName = 'coursehub_csrf';
 const sessionLifetimeMs = 7 * 24 * 60 * 60 * 1000;
 const scryptAsync = promisify(scrypt);
 const passwordResetTokenLifetimeMs = 30 * 60 * 1000;
+const maxCourseMaterialSize = 10 * 1024 * 1024;
+const courseMaterialLimitPerLesson = 20;
+const courseMaterialLimitPerCourse = 50;
+const courseMaterialTypes = {
+    '.pdf': ['application/pdf'],
+    '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+    '.pptx': ['application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+    '.xlsx': ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+    '.txt': ['text/plain'],
+    '.csv': ['text/csv', 'application/csv', 'application/vnd.ms-excel']
+};
 const passwordResetRequestLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 5,
@@ -35,6 +52,12 @@ const passwordResetRequestLimiter = rateLimit({
             error: 'Too many reset requests. Please wait 15 minutes before trying again.'
         });
     }
+});
+const courseMaterialUploadLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 30,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false
 });
 const passwordResetSubmitLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -55,6 +78,16 @@ const coursePhotoUpload = multer({
     fileFilter(req, file, callback) {
         if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
             return callback(new Error('Upload a JPEG, PNG, or WebP image.'));
+        }
+        return callback(null, true);
+    }
+});
+const learningMaterialUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: maxCourseMaterialSize, files: 1, fields: 2, fieldSize: 200, parts: 3 },
+    fileFilter(req, file, callback) {
+        if (!Object.values(courseMaterialTypes).flat().includes(file.mimetype)) {
+            return callback(new Error('Upload a PDF, DOCX, PPTX, XLSX, TXT, or CSV learning material.'));
         }
         return callback(null, true);
     }
@@ -92,6 +125,8 @@ const notices = {
     courseCreated: { type: 'success', message: 'The course has been created.' },
     courseUpdated: { type: 'success', message: 'The course has been updated.' },
     courseStatusUpdated: { type: 'success', message: 'The course status has been updated.' },
+    materialUploaded: { type: 'success', message: 'Learning material uploaded.' },
+    materialRemoved: { type: 'success', message: 'Learning material removed.' },
     lessonCompleted: { type: 'success', message: 'Lesson completed. Your course progress has been updated.' },
     lessonUnavailable: { type: 'error', message: 'That lesson could not be found in this course.' }
 };
@@ -157,17 +192,8 @@ function hashToken(token) {
     return createHash('sha256').update(token).digest('hex');
 }
 
-function getPasswordResetMailer() {
-    const smtpHost = process.env.SMTP_HOST;
-    const smtpPort = Number(process.env.SMTP_PORT || 587);
-    const smtpFrom = process.env.SMTP_FROM;
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPass = process.env.SMTP_PASS;
-    const appBaseUrl = process.env.APP_BASE_URL;
-    if (!smtpHost || !smtpFrom || !appBaseUrl || !Number.isInteger(smtpPort) ||
-        smtpPort < 1 || smtpPort > 65535 ||
-        Boolean(smtpUser) !== Boolean(smtpPass) ||
-        (process.env.NODE_ENV === 'production' && !appBaseUrl.startsWith('https://'))) {
+function normalizeAppBaseUrl(appBaseUrl) {
+    if (!appBaseUrl) {
         return null;
     }
 
@@ -184,6 +210,58 @@ function getPasswordResetMailer() {
     parsedBaseUrl.pathname = parsedBaseUrl.pathname.replace(/\/+$/, '');
     parsedBaseUrl.search = '';
     parsedBaseUrl.hash = '';
+    return parsedBaseUrl.toString().replace(/\/$/, '');
+}
+
+function createDevPasswordResetMailer(baseUrl) {
+    if (!devPasswordResetMailerWarned) {
+        console.warn(
+            'CourseHub: SMTP is not configured. Password reset links are logged here (development only). ' +
+            'Set SMTP_* and APP_BASE_URL in .env for real email delivery.'
+        );
+        devPasswordResetMailerWarned = true;
+    }
+
+    return {
+        transporter: {
+            sendMail(mailOptions) {
+                console.log('\n--- CourseHub password reset (development) ---');
+                console.log(`To: ${mailOptions.to}`);
+                console.log(mailOptions.text || '');
+                console.log('---\n');
+                return Promise.resolve({ messageId: 'dev-password-reset' });
+            }
+        },
+        from: 'CourseHub dev <dev@localhost>',
+        baseUrl
+    };
+}
+
+let devPasswordResetMailerWarned = false;
+
+function getPasswordResetMailer() {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const appBaseUrl = process.env.APP_BASE_URL ||
+        (!isProduction ? `http://localhost:${port}` : '');
+    const baseUrl = normalizeAppBaseUrl(appBaseUrl);
+    if (!baseUrl || (isProduction && !baseUrl.startsWith('https://'))) {
+        return null;
+    }
+
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = Number(process.env.SMTP_PORT || 587);
+    const smtpFrom = process.env.SMTP_FROM;
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+
+    if (!smtpHost || !smtpFrom) {
+        return isProduction ? null : createDevPasswordResetMailer(baseUrl);
+    }
+    if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535 ||
+        Boolean(smtpUser) !== Boolean(smtpPass)) {
+        return isProduction ? null : createDevPasswordResetMailer(baseUrl);
+    }
+
     const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
 
     return {
@@ -197,7 +275,7 @@ function getPasswordResetMailer() {
                 : undefined
         }),
         from: smtpFrom,
-        baseUrl: parsedBaseUrl.toString().replace(/\/$/, '')
+        baseUrl
     };
 }
 
@@ -293,6 +371,58 @@ function parseCoursePhoto(req, res, next) {
     });
 }
 
+function parseLearningMaterial(req, res, next) {
+    learningMaterialUpload.single('material')(req, res, (error) => {
+        if (!error) {
+            return next();
+        }
+        if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+            return res.status(413).send('Learning materials must be 10 MB or smaller.');
+        }
+        if (error instanceof multer.MulterError) {
+            return res.status(400).send('Upload one learning material using the provided form.');
+        }
+        return res.status(400).send(error.message);
+    });
+}
+
+function getLearningMaterialDetails(file) {
+    const extension = path.extname(file.originalname).toLowerCase();
+    const acceptedTypes = courseMaterialTypes[extension];
+    if (!acceptedTypes || !acceptedTypes.includes(file.mimetype) || !file.buffer.length) {
+        return null;
+    }
+    const buffer = file.buffer;
+    if (extension === '.pdf' && buffer.subarray(0, 5).toString('ascii') !== '%PDF-') {
+        return null;
+    }
+    const officeEntry = {
+        '.docx': 'word/document.xml',
+        '.pptx': 'ppt/presentation.xml',
+        '.xlsx': 'xl/workbook.xml'
+    }[extension];
+    if (officeEntry &&
+        !(buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b &&
+            buffer[2] === 0x03 && buffer[3] === 0x04 &&
+            buffer.includes('[Content_Types].xml') && buffer.includes(officeEntry))) {
+        return null;
+    }
+    if (['.txt', '.csv'].includes(extension) &&
+        (buffer.includes(0) || !Buffer.from(buffer.toString('utf8'), 'utf8').equals(buffer))) {
+        return null;
+    }
+
+    const fileName = path.basename(file.originalname.replace(/\\/g, '/'))
+        .replace(/[\u0000-\u001f\u007f]/g, '')
+        .trim()
+        .slice(0, 180);
+    if (!fileName || fileName === '.' || fileName === '..') {
+        return null;
+    }
+    const contentType = extension === '.csv' ? 'text/csv' : file.mimetype;
+    return { fileName, contentType, size: buffer.length, fileData: buffer };
+}
+
 function getCoursePhotoContentType(buffer) {
     if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
         return 'image/png';
@@ -315,7 +445,7 @@ function generateCourseCode(title) {
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.get('/media/coursehub-background.mp4', (req, res, next) => {
-    res.sendFile(path.join(__dirname, '8675557-hd_1920_1080_30fps.mp4'), (error) => {
+    res.sendFile(path.join(__dirname, '8675543-hd_1920_1080_30fps.mp4'), (error) => {
         if (error) {
             next(error);
         }
@@ -869,7 +999,7 @@ app.get('/courses/:courseId', async (req, res) => {
     let course = await Course.findOne({
         _id: req.params.courseId,
         isActive: true
-    }).select('title category instructor description duration capacity photoContentType updatedAt modules.title modules.lessons.title modules.lessons.summary modules.lessons.durationMinutes').lean();
+    }).select(courseDetailCurriculumSelect).lean();
     if (!course && req.user && req.user.role === 'student') {
         const isEnrolled = await Enrollment.exists({
             course: req.params.courseId,
@@ -877,8 +1007,21 @@ app.get('/courses/:courseId', async (req, res) => {
         });
         if (isEnrolled) {
             course = await Course.findById(req.params.courseId)
-                .select('title category instructor description duration capacity photoContentType updatedAt modules.title modules.lessons.title modules.lessons.summary modules.lessons.durationMinutes')
+                .select(courseDetailCurriculumSelect)
                 .lean();
+        }
+    }
+    let canManageCourse = Boolean(course && req.user && (
+        req.user.role === 'admin' ||
+        (req.user.role === 'teacher' && course.createdBy && course.createdBy.toString() === req.user._id.toString())
+    ));
+    if (!course && req.user && ['teacher', 'admin'].includes(req.user.role)) {
+        const manageableCourse = await findManageableCourse(req.params.courseId, req.user);
+        if (manageableCourse) {
+            course = await Course.findById(manageableCourse._id)
+                .select(courseDetailCurriculumSelect)
+                .lean();
+            canManageCourse = Boolean(course);
         }
     }
     if (!course) {
@@ -892,11 +1035,125 @@ app.get('/courses/:courseId', async (req, res) => {
     const learningEnrollment = enrollment
         ? prepareEnrollmentForLearning({ ...enrollment, course })
         : null;
+    const materialsByLesson = {};
+    if (learningEnrollment || canManageCourse) {
+        const materials = await CourseLearningMaterial.find({ course: course._id })
+            .select('lesson fileName size createdAt')
+            .sort({ createdAt: 1 })
+            .lean();
+        for (const material of materials) {
+            const lessonId = material.lesson.toString();
+            if (!materialsByLesson[lessonId]) {
+                materialsByLesson[lessonId] = [];
+            }
+            materialsByLesson[lessonId].push(material);
+        }
+    }
     return res.render('CourseDetails.ejs', {
         course,
         learningEnrollment,
+        materialsByLesson,
+        canManageCourse,
         notice: getNotice(req)
     });
+});
+
+app.post('/manage/courses/:courseId/lessons/:lessonId/materials', requireAuth, requireRole('teacher', 'admin'), courseMaterialUploadLimiter, parseLearningMaterial, requireCsrf, async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.courseId) || !mongoose.isValidObjectId(req.params.lessonId)) {
+        return res.status(404).render('NotFound.ejs');
+    }
+    if (!req.file) {
+        return res.status(400).send('Choose a learning material to upload.');
+    }
+
+    const course = await findManageableCourse(req.params.courseId, req.user);
+    if (!course) {
+        return res.status(404).render('NotFound.ejs');
+    }
+    const lessonExists = (course.modules || []).some((module) =>
+        module.lessons.some((lesson) => lesson._id.toString() === req.params.lessonId)
+    );
+    if (!lessonExists) {
+        return res.status(404).render('NotFound.ejs');
+    }
+    const details = getLearningMaterialDetails(req.file);
+    if (!details) {
+        return res.status(400).send('The file extension, media type, or file contents are invalid.');
+    }
+    const materialCount = await CourseLearningMaterial.countDocuments({
+        course: course._id,
+        lesson: req.params.lessonId
+    });
+    if (materialCount >= courseMaterialLimitPerLesson) {
+        return res.status(400).send(`A lesson can have at most ${courseMaterialLimitPerLesson} learning materials.`);
+    }
+    const courseMaterialCount = await CourseLearningMaterial.countDocuments({ course: course._id });
+    if (courseMaterialCount >= courseMaterialLimitPerCourse) {
+        return res.status(400).send(`A course can have at most ${courseMaterialLimitPerCourse} learning materials.`);
+    }
+
+    await CourseLearningMaterial.create({
+        course: course._id,
+        lesson: req.params.lessonId,
+        ...details
+    });
+    return res.redirect(`/courses/${course._id}?status=materialUploaded`);
+});
+
+app.post('/manage/courses/:courseId/materials/:materialId/delete', requireAuth, requireRole('teacher', 'admin'), requireCsrf, async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.courseId) || !mongoose.isValidObjectId(req.params.materialId)) {
+        return res.status(404).render('NotFound.ejs');
+    }
+    const course = await findManageableCourse(req.params.courseId, req.user);
+    if (!course) {
+        return res.status(404).render('NotFound.ejs');
+    }
+    const result = await CourseLearningMaterial.deleteOne({
+        _id: req.params.materialId,
+        course: course._id
+    });
+    if (!result.deletedCount) {
+        return res.status(404).render('NotFound.ejs');
+    }
+    return res.redirect(`/courses/${course._id}?status=materialRemoved`);
+});
+
+app.get('/courses/:courseId/materials/:materialId', requireAuth, async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.courseId) || !mongoose.isValidObjectId(req.params.materialId)) {
+        return res.sendStatus(404);
+    }
+    const [course, material] = await Promise.all([
+        Course.findById(req.params.courseId).select('createdBy modules._id modules.lessons._id').lean(),
+        CourseLearningMaterial.findOne({
+            _id: req.params.materialId,
+            course: req.params.courseId
+        }).select('lesson fileName contentType size fileData').lean()
+    ]);
+    if (!course || !material) {
+        return res.sendStatus(404);
+    }
+    const lessonExists = (course.modules || []).some((module) =>
+        module.lessons.some((lesson) => lesson._id.toString() === material.lesson.toString())
+    );
+    if (!lessonExists) {
+        return res.sendStatus(404);
+    }
+    const isCourseManager = req.user.role === 'admin' ||
+        (req.user.role === 'teacher' && course.createdBy &&
+            course.createdBy.toString() === req.user._id.toString());
+    const isEnrolled = req.user.role === 'student' && await Enrollment.exists({
+        course: course._id,
+        studentAccount: req.user._id
+    });
+    if (!isCourseManager && !isEnrolled) {
+        return res.sendStatus(404);
+    }
+    res.set({
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff'
+    });
+    res.type(material.contentType);
+    return res.attachment(material.fileName).send(material.fileData);
 });
 
 app.get('/courses/:courseId/photo', async (req, res) => {
@@ -947,7 +1204,7 @@ function prepareEnrollmentForLearning(enrollment) {
 
 async function getStudentLearningEnrollments(studentAccountId) {
     const enrollments = await Enrollment.find({ studentAccount: studentAccountId })
-        .populate('course', 'title category instructor photoContentType duration modules.title modules.lessons.title modules.lessons.durationMinutes')
+        .populate('course', 'title category instructor photoContentType duration modules._id modules.title modules.lessons._id modules.lessons.title modules.lessons.durationMinutes')
         .sort({ lastActivityAt: -1, enrolledAt: -1 })
         .lean();
     return enrollments.map(prepareEnrollmentForLearning);
@@ -1077,7 +1334,7 @@ app.get('/learn/:courseId/:lessonId', requireAuth, requireRole('student'), async
 
     const [course, enrollment] = await Promise.all([
         Course.findById(req.params.courseId)
-            .select('title modules.title modules.lessons.title modules.lessons.summary modules.lessons.content modules.lessons.videoUrl modules.lessons.durationMinutes')
+            .select('title modules._id modules.title modules.lessons._id modules.lessons.title modules.lessons.summary modules.lessons.content modules.lessons.videoUrl modules.lessons.durationMinutes')
             .lean(),
         Enrollment.findOne({ course: req.params.courseId, studentAccount: req.user._id })
     ]);
@@ -1102,10 +1359,15 @@ app.get('/learn/:courseId/:lessonId', requireAuth, requireRole('student'), async
         { _id: enrollment._id },
         { $set: { lastLesson: lesson._id, lastActivityAt: new Date() } }
     );
+    const materials = await CourseLearningMaterial.find({
+        course: course._id,
+        lesson: lesson._id
+    }).select('fileName size createdAt').sort({ createdAt: 1 }).lean();
 
     return res.render('Lesson.ejs', {
         course,
         lesson,
+        materials,
         lessons,
         lessonIndex,
         completed: completedIds.has(lesson._id.toString()),
@@ -1507,6 +1769,97 @@ app.use((error, req, res, next) => {
     return res.status(500).send('Something went wrong while processing your request.');
 });
 
+function formatDurationFromMinutes(totalDuration) {
+    return totalDuration >= 60
+        ? `${Number((totalDuration / 60).toFixed(1))} hours`
+        : `${totalDuration} min`;
+}
+
+function totalCurriculumMinutes(modules) {
+    return modules.reduce(
+        (total, module) => total + module.lessons.reduce((sum, lesson) => sum + lesson.durationMinutes, 0),
+        0
+    );
+}
+
+function toPlainSubdocument(value) {
+    if (value && typeof value.toObject === 'function') {
+        return value.toObject();
+    }
+    return { ...value };
+}
+
+function ensureCurriculumIds(modules) {
+    if (!Array.isArray(modules)) {
+        return [];
+    }
+    return modules.map((module) => {
+        const plainModule = toPlainSubdocument(module);
+        plainModule._id = plainModule._id || new mongoose.Types.ObjectId();
+        plainModule.lessons = (plainModule.lessons || []).map((lesson) => {
+            const plainLesson = toPlainSubdocument(lesson);
+            plainLesson._id = plainLesson._id || new mongoose.Types.ObjectId();
+            return plainLesson;
+        });
+        return plainModule;
+    });
+}
+
+async function repairCourseLessonIds() {
+    const courses = await Course.find({ 'modules.0': { $exists: true } }).select('modules');
+    for (const course of courses) {
+        const modules = course.toObject().modules;
+        const needsUpdate = modules.some((module) =>
+            !module._id || (module.lessons || []).some((lesson) => !lesson._id)
+        );
+        if (!needsUpdate) {
+            continue;
+        }
+        await Course.updateOne(
+            { _id: course._id },
+            { $set: { modules: ensureCurriculumIds(modules) } }
+        );
+    }
+}
+
+const courseDetailCurriculumSelect =
+    'title category instructor description duration capacity photoContentType updatedAt createdBy ' +
+    'modules._id modules.title modules.lessons._id modules.lessons.title modules.lessons.summary modules.lessons.durationMinutes';
+
+async function seedCourseCurriculum() {
+    const courses = await Course.find({})
+        .select('code title description modules')
+        .lean();
+
+    for (const course of courses) {
+        const demoModules = curriculumByCourseCode[course.code];
+        const moduleCount = course.modules?.length || 0;
+        const empty = moduleCount === 0;
+        const genericStarter = !empty && isGenericStarterCurriculum(course.modules, course.title);
+
+        let modules = null;
+        if (demoModules && (empty || genericStarter)) {
+            modules = demoModules;
+        } else if (empty) {
+            modules = buildStarterCurriculum(course.title, course.description);
+        }
+        if (!modules) {
+            continue;
+        }
+        modules = ensureCurriculumIds(modules);
+
+        const duration = formatDurationFromMinutes(totalCurriculumMinutes(modules));
+        const filter = empty
+            ? {
+                _id: course._id,
+                $expr: { $eq: [{ $size: { $ifNull: ['$modules', []] } }, 0] }
+            }
+            : { _id: course._id };
+
+        await Course.updateOne(filter, { $set: { modules, duration } });
+    }
+}
+
 async function seedCourses() {
     const courses = [
         {
@@ -1758,9 +2111,12 @@ async function startServer() {
         StudentLearningActivity.init(),
         StudentSavedCourse.init(),
         StudentSession.init(),
-        PasswordResetToken.init()
+        PasswordResetToken.init(),
+        CourseLearningMaterial.init()
     ]);
     await seedCourses();
+    await seedCourseCurriculum();
+    await repairCourseLessonIds();
     console.log('MongoDB connected');
 
     app.listen(port, () => {

@@ -13,6 +13,7 @@ create an account, enroll, and keep track of their learning.
 - Sign up and sign in as a teacher to manage courses from the teaching dashboard.
 - Upload a course photo when creating courses and update it later from the course editor.
 - Build course curricula with ordered modules, reading lessons, HTTPS video links, and lesson durations.
+- Upload downloadable learning materials to lessons and share them with enrolled students.
 - Enroll in courses, track lesson completion, and continue from the last lesson.
 - View course progress and learning totals on the student dashboard and filter courses by completion status.
 - Save courses to an account-backed wishlist and manage saved courses across devices.
@@ -70,6 +71,24 @@ create an account, enroll, and keep track of their learning.
    `SMTP_USER`/`SMTP_PASS` credentials, and a verified `SMTP_FROM` sender.
    Do not commit SMTP credentials to source control.
 
+   For Resend on Render, open the service's **Environment** settings and add:
+
+   ```text
+   APP_BASE_URL=https://dbms-cp-hjnm.onrender.com
+   SMTP_HOST=smtp.resend.com
+   SMTP_PORT=465
+   SMTP_SECURE=true
+   SMTP_USER=resend
+   SMTP_PASS=<your Resend API key>
+   SMTP_FROM=CourseHub <no-reply@your-verified-domain>
+   ```
+
+   Create a Resend API key and verify the sender domain in Resend first. Replace
+   the `SMTP_PASS` placeholder with the API key privately in Render, and use an
+   address on the verified domain for `SMTP_FROM`. Save the environment settings
+   and redeploy/restart the service. Port `587` with `SMTP_SECURE=false` is also
+   supported. Do not paste the API key into source code, README, or chat.
+
 3. Start the application:
 
    ```bash
@@ -103,6 +122,7 @@ courses if they are not already present. Existing course records are retained.
 | `POST /profile/learning-goal` | Update a student's weekly lesson-minute goal (CSRF protected) |
 | `GET /learn/:courseId/:lessonId` | Open a lesson in an enrolled course |
 | `POST /learn/:courseId/:lessonId/complete` | Mark an enrolled lesson complete (CSRF protected) |
+| `GET /courses/:courseId/materials/:materialId` | Download a lesson material as an enrolled student or course manager |
 | `GET /signup` and `POST /signup` | Create an account |
 | `GET /login` and `POST /login` | Sign in |
 | `GET /forgot-password` and `POST /forgot-password` | Request an email password-reset link |
@@ -116,6 +136,8 @@ courses if they are not already present. Existing course records are retained.
 | `GET /teacher` | Teacher overview and management for the teacher's courses |
 | `GET /admin` | Admin overview of accounts, courses, and enrollments |
 | `/manage/courses/*` | Create, edit, publish, or archive courses (teacher/admin) |
+| `POST /manage/courses/:courseId/lessons/:lessonId/materials` | Upload lesson material (teacher/admin, CSRF protected) |
+| `POST /manage/courses/:courseId/materials/:materialId/delete` | Remove lesson material (teacher/admin, CSRF protected) |
 
 Profile pages require a signed-in account. Enrollment, student dashboard,
 course progress, and lesson pages require a signed-in student account.
@@ -133,6 +155,13 @@ continue to be browsed; instructors can add modules and lessons in the course
 editor. Existing courses without photos use a category placeholder until a
 photo is uploaded. Archiving hides a course from the public catalog without
 removing it from enrolled students' learning pages.
+
+Teachers can add up to 20 learning materials per lesson and 50 per course from
+the course detail page. PDF, DOCX, PPTX, XLSX, TXT, and CSV files are accepted
+up to 10 MB each.
+Files are stored in a separate MongoDB collection rather than embedded in the
+course document. Only course owners and administrators can upload or remove
+materials; downloads are limited to those managers and enrolled students.
 
 Signed-in students' saved courses are stored as separate student/course records; guest catalog
 favorites remain browser-local. Weekly goals default to 300 minutes and can be
@@ -171,6 +200,8 @@ video files supported by the browser's native video player.
 - **Course** — internally generated course code, title, category, instructor,
   description, calculated duration, ordered modules and lessons, capacity,
   optional photo, creator reference, and active status.
+- **CourseLearningMaterial** — bounded downloadable lesson file metadata and
+  content, referenced by course and lesson.
 - **StudentAccount** — name, unique email, password hash and salt, student/teacher role, and weekly learning goal.
 - **StudentSession** — hashed session token, account reference, and expiration.
 - **StudentSavedCourse** — a referenced student/course wishlist entry with a unique compound index.

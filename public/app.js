@@ -1,6 +1,22 @@
 (() => {
     const video = document.querySelector('.hero-video');
 
+    // ── Home page: sticky glass header scroll behaviour ──
+    const siteHeader = document.querySelector('.site-header');
+    if (document.body.classList.contains('home-page') && siteHeader) {
+        const heroSection = document.querySelector('.hero');
+        const onScroll = () => {
+            const heroBottom = heroSection ? heroSection.getBoundingClientRect().bottom : 0;
+            if (window.scrollY > 40) {
+                siteHeader.classList.add('scrolled');
+            } else {
+                siteHeader.classList.remove('scrolled');
+            }
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        onScroll(); // run once on load
+    }
+
     const coursePhotoInput = document.querySelector('[data-course-photo-input]');
     const coursePhotoPreview = document.querySelector('[data-course-photo-preview]');
     if (coursePhotoInput && coursePhotoPreview) {
