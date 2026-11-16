@@ -1,7 +1,12 @@
-<div class="course-photo <%= typeof photoClass === 'undefined' ? '' : photoClass %><%= course.photoContentType ? '' : ' course-photo-placeholder' %>">
+<div class="course-photo <%= typeof photoClass === 'undefined' ? '' : photoClass %><%= (course.photoContentType || course.code) ? '' : ' course-photo-placeholder' %>">
     <% if (course.photoContentType) { %>
         <img src="/courses/<%= course._id %>/photo?v=<%= course.updatedAt ? course.updatedAt.getTime() : '' %>"
-            alt="<%= course.title %> course photo" loading="lazy">
+            alt="<%= course.title %> course photo" loading="lazy"
+            onerror="if(!this.dataset.fallback && '<%= course.code || '' %>'){this.dataset.fallback='1';this.src='/images/courses/<%= course.code %>.jpg';}else{this.style.display='none';this.parentElement.classList.add('course-photo-placeholder');}">
+    <% } else if (course.code) { %>
+        <img src="/images/courses/<%= course.code %>.jpg"
+            alt="<%= course.title %> course photo" loading="lazy"
+            onerror="this.style.display='none';this.parentElement.classList.add('course-photo-placeholder');">
     <% } else { %>
         <span class="course-photo-mark" aria-hidden="true">✦</span>
         <span class="course-photo-label"><%= course.category %></span>

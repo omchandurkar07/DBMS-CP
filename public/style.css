@@ -39,86 +39,80 @@ a {
     -webkit-backdrop-filter: blur(12px);
 }
 
-/* ── Home page: elegant dark-glass header overlaying the hero video ── */
+/* ── Home page header (Light Theme) ── */
 .home-page .site-header {
-    position: absolute;
+    position: sticky;
     top: 0;
     left: 0;
     right: 0;
-    z-index: 10;
-    background: linear-gradient(
-        180deg,
-        rgba(10, 8, 6, 0.78) 0%,
-        rgba(10, 8, 6, 0.42) 60%,
-        rgba(10, 8, 6, 0.0) 100%
-    );
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    backdrop-filter: blur(0px);
-    -webkit-backdrop-filter: blur(0px);
-    transition: background 350ms ease, border-color 350ms ease, backdrop-filter 350ms ease, box-shadow 350ms ease;
+    z-index: 100;
+    background: rgba(255, 255, 255, 0.94);
+    border-bottom: 1px solid #e8e4da;
+    box-shadow: 0 2px 14px rgba(35, 44, 83, 0.05);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    transition: background 250ms ease, box-shadow 250ms ease;
 }
 
 .home-page .site-header.scrolled {
-    position: sticky;
-    background: rgba(18, 14, 10, 0.88);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(22px) saturate(1.6);
-    -webkit-backdrop-filter: blur(22px) saturate(1.6);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.32), 0 1px 0 rgba(255,255,255,0.05) inset;
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 4px 20px rgba(35, 44, 83, 0.08);
 }
 
 /* ── Brand on home ── */
 .home-page .brand {
-    color: #fff;
+    color: #28372f;
 }
 
 .home-page .brand-tagline {
-    color: rgba(255,255,255,0.55);
+    color: #a6532f;
 }
 
 .home-page .brand-mark {
-    background: rgba(255, 255, 255, 0.14);
-    border: 1px solid rgba(255, 255, 255, 0.24);
-    box-shadow: 0 0 0 4px rgba(255,255,255,0.05);
+    background: linear-gradient(145deg, #b8622e, #a6532f 60%, #7e3e22);
+    border: none;
+    box-shadow: 0 3px 10px rgba(166, 83, 47, 0.35);
 }
 
 /* ── Nav links on home ── */
 .home-page .main-nav a:not(.nav-signin):not(.nav-signup) {
-    color: rgba(255, 255, 255, 0.78);
+    color: #525c75;
 }
 
 .home-page .main-nav a:not(.nav-signin):not(.nav-signup):hover,
 .home-page .main-nav a:not(.nav-signin):not(.nav-signup):focus-visible {
-    color: #fff;
+    color: #a6532f;
+    background: rgba(166, 83, 47, 0.07);
 }
 
 /* ── Sign In button on home page ── */
 .home-page .nav-signin {
-    color: rgba(255, 255, 255, 0.88) !important;
-    border-color: rgba(255, 255, 255, 0.28) !important;
-    background: rgba(255, 255, 255, 0.06) !important;
+    color: #81492f !important;
+    border-color: #e5d9ca !important;
+    background: #fffdf8 !important;
 }
 
 .home-page .nav-signin:hover,
 .home-page .nav-signin:focus-visible {
-    color: #fff !important;
-    border-color: rgba(255, 255, 255, 0.52) !important;
-    background: rgba(255, 255, 255, 0.14) !important;
+    color: #6b3520 !important;
+    border-color: #c0804c !important;
+    background: #f8ede0 !important;
     transform: translateY(-1px);
 }
 
 /* ── Sign Up / Create account button on home page ── */
 .home-page .nav-signup {
-    color: #1a0f08 !important;
-    background: linear-gradient(135deg, #f5dfb5 0%, #f2c97a 100%) !important;
-    border-color: transparent !important;
-    box-shadow: 0 2px 12px rgba(220, 160, 60, 0.35) !important;
+    color: #ffffff !important;
+    background: linear-gradient(135deg, #b8622e, #a6532f) !important;
+    border-color: #a6532f !important;
+    box-shadow: 0 2px 10px rgba(166, 83, 47, 0.28) !important;
 }
 
 .home-page .nav-signup:hover,
 .home-page .nav-signup:focus-visible {
-    background: linear-gradient(135deg, #ffedcc 0%, #f5d280 100%) !important;
-    box-shadow: 0 4px 18px rgba(220, 160, 60, 0.48) !important;
+    color: #ffffff !important;
+    background: linear-gradient(135deg, #c96f38, #8f4428) !important;
+    box-shadow: 0 4px 14px rgba(166, 83, 47, 0.4) !important;
     transform: translateY(-1px);
 }
 
@@ -1205,12 +1199,6 @@ a {
     box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 4px 18px rgba(25, 34, 69, 0.04);
 }
 
-/* Home page overrides the sticky positioning */
-.home-page .site-header:not(.scrolled) {
-    position: absolute;
-    box-shadow: none;
-}
-
 .main-nav a {
     transition: color 160ms ease, background 160ms ease;
 }
@@ -1218,10 +1206,15 @@ a {
 .hero {
     position: relative;
     isolation: isolate;
-    min-height: clamp(600px, 82vh, 860px);
+    min-height: clamp(520px, 72vh, 740px);
     background: #26372e;
-    margin-top: -74px;
-    padding-top: 74px;
+    margin: 20px 2.5% 0;
+    border-radius: 16px;
+    padding: 72px 6%;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    box-shadow: 0 12px 36px rgba(18, 14, 10, 0.12);
 }
 
 .hero::before {
@@ -1427,8 +1420,9 @@ a:focus-visible {
 
     .hero {
         min-height: unset;
-        padding-top: 58px;
-        padding-bottom: 78px;
+        margin: 14px 16px 0;
+        border-radius: 12px;
+        padding: 52px 6% 68px;
     }
 
     .hero-art {
@@ -3907,5 +3901,281 @@ a:focus-visible {
     .saved-course-actions {
         align-items: flex-start;
         flex-direction: column;
+    }
+}
+
+
+/* ==========================================================
+   COURSEHUB HEADER FIX — append-only overrides
+   Keeps the existing page styling and fixes header alignment,
+   overflow, and responsive navigation.
+   ========================================================== */
+
+.site-header {
+    width: 100%;
+    min-height: 76px;
+    padding: 12px clamp(20px, 4vw, 64px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: nowrap;
+    box-sizing: border-box;
+}
+
+.site-header > * {
+    min-width: 0;
+}
+
+.site-header .brand {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: 12px;
+    min-width: 0;
+    white-space: nowrap;
+    line-height: 1.1;
+}
+
+.site-header .brand-mark {
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+}
+
+.site-header .brand-identity {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+}
+
+.site-header .brand-identity > * {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.site-header .brand-tagline {
+    display: block;
+    font-size: 0.62rem;
+    line-height: 1.2;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+}
+
+.site-header .main-nav {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: clamp(3px, 0.45vw, 10px);
+}
+
+.site-header .main-nav > a,
+.site-header .main-nav > form,
+.site-header .main-nav > .nav-greeting,
+.site-header .main-nav > .nav-separator {
+    flex: 0 0 auto;
+}
+
+.site-header .main-nav > a {
+    white-space: nowrap;
+}
+
+.site-header .main-nav a:not(.nav-signin):not(.nav-signup) {
+    padding: 8px clamp(5px, 0.6vw, 11px);
+    font-size: clamp(0.76rem, 0.85vw, 0.92rem);
+}
+
+.site-header .nav-greeting {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.site-header .nav-auth-button,
+.site-header .main-nav a.nav-signin,
+.site-header .main-nav a.nav-signup {
+    min-height: 42px;
+    padding: 0 16px;
+    white-space: nowrap;
+}
+
+/* Compact desktop / laptop screens */
+@media (max-width: 1250px) {
+    .site-header {
+        padding-right: 24px;
+        padding-left: 24px;
+        gap: 14px;
+    }
+
+    .site-header .brand {
+        gap: 9px;
+    }
+
+    .site-header .brand-tagline {
+        font-size: 0.53rem;
+        letter-spacing: 0.045em;
+    }
+
+    .site-header .main-nav {
+        gap: 2px;
+    }
+
+    .site-header .main-nav a:not(.nav-signin):not(.nav-signup) {
+        padding-right: 6px;
+        padding-left: 6px;
+        font-size: 0.76rem;
+    }
+
+    .site-header .nav-greeting {
+        max-width: 125px;
+        font-size: 0.74rem;
+    }
+
+    .site-header .nav-auth-button,
+    .site-header .main-nav a.nav-signin,
+    .site-header .main-nav a.nav-signup {
+        padding-right: 11px;
+        padding-left: 11px;
+    }
+}
+
+/* Tablet: move navigation onto its own row instead of overlapping */
+@media (max-width: 900px) {
+    .site-header {
+        position: relative;
+        min-height: auto;
+        padding: 14px 20px;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .site-header .main-nav {
+        flex: 1 1 100%;
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .site-header .main-nav a:not(.nav-signin):not(.nav-signup) {
+        padding: 8px 9px;
+        font-size: 0.82rem;
+    }
+
+    .site-header .nav-greeting {
+        display: none;
+    }
+}
+
+/* Phones */
+@media (max-width: 560px) {
+    .site-header {
+        padding: 12px 16px;
+        gap: 12px;
+    }
+
+    .site-header .brand {
+        gap: 8px;
+        font-size: 1rem;
+    }
+
+    .site-header .brand-mark {
+        width: 38px;
+        height: 38px;
+        flex-basis: 38px;
+    }
+
+    .site-header .brand-tagline {
+        font-size: 0.47rem;
+        letter-spacing: 0.025em;
+    }
+
+    .site-header .main-nav {
+        gap: 4px;
+    }
+
+    .site-header .main-nav a:not(.nav-signin):not(.nav-signup) {
+        padding: 7px;
+        font-size: 0.75rem;
+    }
+
+    .site-header .nav-auth-button,
+    .site-header .main-nav a.nav-signin,
+    .site-header .main-nav a.nav-signup {
+        min-height: 36px;
+        padding: 0 10px;
+        font-size: 0.76rem;
+    }
+}
+
+/* Prevent accidental horizontal page scrolling */
+html,
+body {
+    max-width: 100%;
+    overflow-x: clip;
+}
+
+/* Home Page Header & Nav Polish (Light Theme) */
+.home-page .site-header {
+    background: rgba(255, 255, 255, 0.94);
+    border-bottom: 1px solid #e8e4da;
+    box-shadow: 0 2px 14px rgba(35, 44, 83, 0.05);
+}
+
+.home-page .site-header.scrolled {
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 4px 20px rgba(35, 44, 83, 0.08);
+}
+
+.home-page .nav-greeting {
+    color: #636b80;
+    font-weight: 500;
+}
+
+.home-page .nav-auth-button {
+    background: #fffdf8 !important;
+    color: #81492f !important;
+    border: 1px solid #e5d9ca !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+.home-page .nav-auth-button:hover,
+.home-page .nav-auth-button:focus-visible {
+    background: #f8ede0 !important;
+    border-color: #c0804c !important;
+    color: #6b3520 !important;
+    box-shadow: 0 2px 8px rgba(166, 83, 47, 0.15) !important;
+    transform: translateY(-1px);
+}
+
+/* Smooth Image display and graceful loading */
+.course-photo {
+    background: #f1ede6;
+    border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.course-photo img {
+    transition: transform 240ms ease, opacity 200ms ease;
+}
+
+.course-card:hover .course-photo img {
+    transform: scale(1.03);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .site-header,
+    .site-header * {
+        scroll-behavior: auto;
+        transition-duration: 0.01ms;
     }
 }

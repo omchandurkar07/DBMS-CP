@@ -1,4 +1,5 @@
 const express = require('express');
+const fs = require('fs');
 const mongoose = require('mongoose');
 const multer = require('multer');
 const nodemailer = require('nodemailer');
@@ -1153,7 +1154,17 @@ app.get('/courses/:courseId/materials/:materialId', requireAuth, async (req, res
         'X-Content-Type-Options': 'nosniff'
     });
     res.type(material.contentType);
-    return res.attachment(material.fileName).send(material.fileData);
+    let materialBuffer = material.fileData;
+    if (materialBuffer && !Buffer.isBuffer(materialBuffer)) {
+        if (materialBuffer.buffer && Buffer.isBuffer(materialBuffer.buffer)) {
+            materialBuffer = materialBuffer.buffer;
+        } else if (typeof materialBuffer.read === 'function') {
+            materialBuffer = materialBuffer.read(0, materialBuffer.length());
+        } else {
+            materialBuffer = Buffer.from(materialBuffer);
+        }
+    }
+    return res.attachment(material.fileName).send(materialBuffer);
 });
 
 app.get('/courses/:courseId/photo', async (req, res) => {
@@ -1162,15 +1173,37 @@ app.get('/courses/:courseId/photo', async (req, res) => {
     }
 
     const course = await Course.findById(req.params.courseId)
-        .select('photoData photoContentType')
+        .select('photoData photoContentType code')
         .lean();
-    if (!course || !course.photoData || !course.photoContentType) {
+    if (!course) {
         return res.sendStatus(404);
+    }
+    if (!course.photoData || !course.photoContentType) {
+        if (course.code) {
+            const fallbackPath = path.join(__dirname, 'public', 'images', 'courses', `${course.code}.jpg`);
+            if (fs.existsSync(fallbackPath)) {
+                res.set('X-Content-Type-Options', 'nosniff');
+                res.set('Cache-Control', 'public, max-age=300');
+                return res.sendFile(fallbackPath);
+            }
+        }
+        return res.sendStatus(404);
+    }
+
+    let photoBuffer = course.photoData;
+    if (photoBuffer && !Buffer.isBuffer(photoBuffer)) {
+        if (photoBuffer.buffer && Buffer.isBuffer(photoBuffer.buffer)) {
+            photoBuffer = photoBuffer.buffer;
+        } else if (typeof photoBuffer.read === 'function') {
+            photoBuffer = photoBuffer.read(0, photoBuffer.length());
+        } else {
+            photoBuffer = Buffer.from(photoBuffer);
+        }
     }
 
     res.set('X-Content-Type-Options', 'nosniff');
     res.set('Cache-Control', 'public, max-age=300');
-    return res.type(course.photoContentType).send(course.photoData);
+    return res.type(course.photoContentType).send(photoBuffer);
 });
 
 function prepareEnrollmentForLearning(enrollment) {
@@ -2089,13 +2122,37 @@ async function seedCourses() {
         }
     ];
 
-    await Course.bulkWrite(courses.map((course) => ({
+    const coursePhotosDir = path.join(__dirname, 'public', 'images', 'courses');
+    const enrichedCourses = courses.map((course) => {
+        const photoPath = path.join(coursePhotosDir, `${course.code}.jpg`);
+        if (fs.existsSync(photoPath)) {
+            const photoData = fs.readFileSync(photoPath);
+            const photoContentType = getCoursePhotoContentType(photoData);
+            return {
+                ...course,
+                photoData,
+                photoContentType
+            };
+        }
+        return course;
+    });
+
+    await Course.bulkWrite(enrichedCourses.map((course) => ({
         updateOne: {
             filter: { code: course.code },
             update: { $setOnInsert: course },
             upsert: true
         }
     })));
+
+    for (const course of enrichedCourses) {
+        if (course.photoData && course.photoContentType) {
+            await Course.updateOne(
+                { code: course.code, $or: [{ photoData: null }, { photoData: { $exists: false } }] },
+                { $set: { photoData: course.photoData, photoContentType: course.photoContentType } }
+            );
+        }
+    }
 }
 
 async function startServer() {

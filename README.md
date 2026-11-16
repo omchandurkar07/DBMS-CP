@@ -211,6 +211,240 @@ video files supported by the browser's native video player.
 - **StudentLearningActivity** — one estimated-duration activity record per
   completed student/course/lesson, with a unique compound index.
 
+## Database Management System (DBMS) Implementation
+
+CourseHub is developed as a full-featured Course Project demonstrating practical DBMS concepts, data modeling patterns, indexing strategies, transactions/concurrency control, and complex aggregation pipelines using MongoDB and Mongoose.
+
+### 1. Key DBMS Concepts Used in the Project
+
+- **Document-Based Data Modeling**:
+  - **Embedded Subdocuments**: Fast single-document reads without joins. Used for `Course.modules` and nested `lessons`.
+  - **Normalized References (`ObjectId` links)**: Prevents document bloat and enables atomic independent updates. Used between `Enrollment -> Course`, `Enrollment -> StudentAccount`, and `CourseLearningMaterial -> Course`.
+- **Integrity Constraints & Validation**:
+  - **Unique Constraints**: Unique indexes on `studentaccounts.email` and `courses.code` to prevent duplicate identities and codes.
+  - **Compound Unique Constraints**:
+    - `enrollments`: `{ course: 1, email: 1 }` prevents duplicate student enrollments in the same course.
+    - `studentsavedcourses`: `{ studentAccount: 1, course: 1 }` prevents duplicate wishlist entries.
+    - `studentlearningactivities`: `{ studentAccount: 1, course: 1, lesson: 1 }` guarantees idempotent lesson completions.
+- **Indexing Strategies**:
+  - **Compound Filter & Sort Indexes**: `{ isActive: 1, title: 1 }`, `{ isActive: 1, category: 1, title: 1 }`, and `{ isActive: 1, createdAt: -1, title: 1 }` accelerate catalog queries, category filtering, and sorting.
+  - **TTL (Time-To-Live) Indexes**: Automatic database-level cleanup for expired records:
+    - `studentsessions.expiresAt` (expires automatically via TTL index).
+    - `passwordresettokens.expiresAt` (cleared automatically after 30 minutes).
+- **Binary Data Storage (BLOB / Grid-Style Storage)**:
+  - Binary buffers are stored for course photo assets and lesson materials with strict MIME-type validation and size caps (5 MB photos, 10 MB materials).
+- **Concurrency Control & Seat Capacity**:
+  - Atomic count checks before enrollment creation ensuring `enrollmentCount < course.capacity`.
+
+---
+
+### 2. Database Queries and Operations Used in the System
+
+#### A. Complex Aggregation Pipelines
+
+**Catalog Course Browsing with Dynamic Lookup and Pagination (`GET /courses`):**
+```javascript
+// Aggregates courses with live enrollment counts, applies filtering, availability checks, and pagination
+db.courses.aggregate([
+    { $match: { isActive: true, category: "Computer Science" } },
+    {
+        $lookup: {
+            from: "enrollments",
+            let: { courseId: "$_id" },
+            pipeline: [
+                { $match: { $expr: { $eq: ["$course", "$$courseId"] } } },
+                { $count: "count" }
+            ],
+            as: "enrollmentStats"
+        }
+    },
+    {
+        $addFields: {
+            enrollmentCount: { $ifNull: [{ $arrayElemAt: ["$enrollmentStats.count", 0] }, 0] }
+        }
+    },
+    { $match: { $expr: { $lt: ["$enrollmentCount", "$capacity"] } } }, // Seat availability filter
+    {
+        $facet: {
+            metadata: [{ $count: "total" }],
+            courses: [
+                { $sort: { createdAt: -1, title: 1 } },
+                { $skip: 0 },
+                { $limit: 9 },
+                { $project: { photoData: 0, modules: 0, enrollmentStats: 0 } }
+            ]
+        }
+    }
+]);
+```
+
+**Teacher Platform Stats Aggregation (`GET /teacher`):**
+```javascript
+// Computes distinct student count and total enrollments across teacher courses
+db.enrollments.aggregate([
+    { $match: { course: { $in: teacherCourseIds } } },
+    {
+        $group: {
+            _id: null,
+            totalEnrollments: { $sum: 1 },
+            uniqueStudents: { $addToSet: "$studentAccount" }
+        }
+    },
+    {
+        $project: {
+            totalEnrollments: 1,
+            studentCount: { $size: "$uniqueStudents" }
+        }
+    }
+]);
+```
+
+**Student Weekly Activity Aggregation (`GET /my-learning`):**
+```javascript
+// Groups completed lessons in the current week to calculate total learning minutes
+db.studentlearningactivities.aggregate([
+    {
+        $match: {
+            studentAccount: studentAccountId,
+            completedAt: { $gte: startOfWeekUtc, $lt: endOfWeekUtc }
+        }
+    },
+    {
+        $group: {
+            _id: null,
+            totalMinutes: { $sum: "$durationMinutes" },
+            completedLessonsCount: { $sum: 1 }
+        }
+    }
+]);
+```
+
+#### B. CRUD Operations
+
+**1. Create Operations (Insertions)**
+- **User Signup**:
+  ```javascript
+  db.studentaccounts.insertOne({
+      name: "Jane Doe",
+      email: "jane@example.com",
+      passwordHash: "<scrypt_derived_hash>",
+      passwordSalt: "<random_salt>",
+      role: "student",
+      weeklyLearningGoalMinutes: 300,
+      createdAt: new Date(),
+      updatedAt: new Date()
+  });
+  ```
+- **Course Creation with Photo (Teacher/Admin)**:
+  ```javascript
+  db.courses.insertOne({
+      code: "OS-67890",
+      title: "Operating System",
+      category: "Computer Science",
+      instructor: "Prof. Sharma",
+      description: "Core Operating System concepts, processes, memory management.",
+      duration: "6 hours 30 mins",
+      capacity: 35,
+      photoData: BinData(0, "<binary_image_data>"),
+      photoContentType: "image/jpeg",
+      createdBy: teacherAccountId,
+      isActive: true,
+      modules: [ /* modules & lessons */ ]
+  });
+  ```
+- **Course Enrollment**:
+  ```javascript
+  db.enrollments.insertOne({
+      studentAccount: studentAccountId,
+      course: courseId,
+      name: "Jane Doe",
+      email: "jane@example.com",
+      enrolledAt: new Date(),
+      completedLessons: [],
+      lastActivityAt: new Date()
+  });
+  ```
+
+**2. Read Operations (Queries & Population)**
+- **Course Retrieval with Optimized Projection**:
+  ```javascript
+  // Binary photoData and modules are excluded for high-speed listing
+  db.courses.find({ isActive: true })
+      .projection({ photoData: 0, modules: 0 })
+      .sort({ title: 1 });
+  ```
+- **Photo Serving Query**:
+  ```javascript
+  db.courses.findOne(
+      { _id: ObjectId("course_id") },
+      { photoData: 1, photoContentType: 1 }
+  );
+  ```
+- **Wishlist / Saved Courses with Joins (`$lookup` / `.populate`)**:
+  ```javascript
+  db.studentsavedcourses.find({ studentAccount: studentAccountId })
+      .sort({ savedAt: -1 });
+  // Populates referenced Course document metadata
+  ```
+
+**3. Update Operations**
+- **Idempotent Upsert for Course Wishlist**:
+  ```javascript
+  db.studentsavedcourses.updateOne(
+      { studentAccount: studentAccountId, course: courseId },
+      { $setOnInsert: { savedAt: new Date() } },
+      { upsert: true }
+  );
+  ```
+- **Marking a Lesson Complete (`$addToSet`)**:
+  ```javascript
+  db.enrollments.updateOne(
+      { _id: enrollmentId },
+      {
+          $addToSet: { completedLessons: lessonId },
+          $set: { lastLesson: lessonId, lastActivityAt: new Date() }
+      }
+  );
+  ```
+- **Updating Course Metadata and Capacity**:
+  ```javascript
+  db.courses.updateOne(
+      { _id: courseId },
+      {
+          $set: {
+              title: "Operating System",
+              capacity: 40,
+              photoData: BinData(0, "<new_photo_data>"),
+              photoContentType: "image/jpeg"
+          }
+      }
+  );
+  ```
+
+**4. Delete Operations**
+- **Removing a Saved Course**:
+  ```javascript
+  db.studentsavedcourses.deleteOne({
+      studentAccount: studentAccountId,
+      course: courseId
+  });
+  ```
+- **User Sign-Out (Session Invalidation)**:
+  ```javascript
+  db.studentsessions.deleteOne({
+      tokenHash: "<sha256_hash_of_cookie_token>"
+  });
+  ```
+- **Removing Lesson Learning Material**:
+  ```javascript
+  db.courselearningmaterials.deleteOne({
+      _id: materialId,
+      course: courseId
+  });
+  ```
+
+---
+
 ## Security notes
 
 - Keep `.env` out of source control; it contains database connection details.
@@ -218,3 +452,4 @@ video files supported by the browser's native video player.
   `Secure` attribute. Serve the app over HTTPS in production.
 - Use a strong database credential and restrict database network access to
   trusted hosts.
+
