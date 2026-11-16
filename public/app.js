@@ -216,7 +216,7 @@
                 const isSelected = selectedCourses.has(button.dataset.courseId);
                 button.setAttribute('aria-pressed', String(isSelected));
                 button.querySelector('[data-compare-icon]').textContent = isSelected ? '✓' : '＋';
-                button.querySelector('[data-compare-label]').textContent = isSelected ? 'Selected' : 'Compare';
+                button.querySelector('[data-compare-label]').textContent = isSelected ? 'Added' : 'Add Course';
             });
         };
 
