@@ -8,7 +8,13 @@ const studentSessionSchema = new mongoose.Schema({
     },
     account: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'StudentAccount',
+        refPath: 'accountModel',
+        required: true
+    },
+    accountModel: {
+        type: String,
+        enum: ['StudentAccount', 'TeacherAccount'],
+        default: 'StudentAccount',
         required: true
     },
     expiresAt: {

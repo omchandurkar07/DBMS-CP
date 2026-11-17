@@ -25,7 +25,9 @@
                         <div class="enrollment-course">
                             <% if (enrollment.course) { %>
                                 <h4><%= enrollment.course.title %></h4>
-                                <p><%= enrollment.course.category %> · <%= enrollment.course.instructor %></p>
+                                <p><%= enrollment.course.category %> · <%= enrollment.course.instructor %> ·
+                                    <a class="course-updates-link" href="/courses/<%= enrollment.course._id %>#course-announcements">Course updates &amp; reviews</a>
+                                </p>
                             <% } else { %>
                                 <h4>Course unavailable</h4>
                                 <p>This course is no longer in the catalog.</p>

@@ -3,9 +3,14 @@ const mongoose = require('mongoose');
 const passwordResetTokenSchema = new mongoose.Schema({
     account: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'StudentAccount',
+        refPath: 'accountModel',
         required: true,
-        unique: true
+    },
+    accountModel: {
+        type: String,
+        enum: ['StudentAccount', 'TeacherAccount'],
+        default: 'StudentAccount',
+        required: true
     },
     tokenHash: {
         type: String,
@@ -19,5 +24,7 @@ const passwordResetTokenSchema = new mongoose.Schema({
         expires: 0
     }
 }, { timestamps: true });
+
+passwordResetTokenSchema.index({ accountModel: 1, account: 1 }, { unique: true });
 
 module.exports = mongoose.model('PasswordResetToken', passwordResetTokenSchema);

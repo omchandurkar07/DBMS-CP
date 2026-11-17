@@ -98,6 +98,94 @@
                         <p class="curriculum-empty">The instructor has not added lessons to this course yet.</p>
                     <% } %>
                 </section>
+                <% if (learningEnrollment || canManageCourse) { %>
+                    <section class="course-community-section" id="course-announcements" aria-labelledby="course-announcements-title">
+                        <div class="course-community-heading">
+                            <div>
+                                <p class="eyebrow">Class updates</p>
+                                <h2 id="course-announcements-title">Course announcements</h2>
+                            </div>
+                        </div>
+                        <% if (canManageCourse) { %>
+                            <form class="course-community-form" action="/manage/courses/<%= course._id %>/announcements" method="POST">
+                                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                                <label for="announcement-title">Announcement title</label>
+                                <input id="announcement-title" name="title" type="text" maxlength="120" required>
+                                <label for="announcement-message">Message for enrolled students</label>
+                                <textarea id="announcement-message" name="message" rows="4" maxlength="2000" required></textarea>
+                                <button class="enroll-button" type="submit">Post announcement</button>
+                            </form>
+                        <% } %>
+                        <% if (announcements.length > 0) { %>
+                            <div class="course-community-list">
+                                <% announcements.forEach((announcement) => { %>
+                                    <article class="course-community-item">
+                                        <div class="course-community-meta">
+                                            <strong><%= announcement.title %></strong>
+                                            <time datetime="<%= announcement.createdAt.toISOString() %>"><%= announcement.createdAt.toLocaleDateString() %></time>
+                                        </div>
+                                        <p><%= announcement.message %></p>
+                                        <span>Posted by <%= announcement.authorName %></span>
+                                    </article>
+                                <% }); %>
+                            </div>
+                        <% } else { %>
+                            <p class="course-community-empty">No announcements have been posted for this course yet.</p>
+                        <% } %>
+                    </section>
+                <% } %>
+                <section class="course-community-section" id="course-reviews" aria-labelledby="course-reviews-title">
+                    <div class="course-community-heading">
+                        <div>
+                            <p class="eyebrow">Learner feedback</p>
+                            <h2 id="course-reviews-title">Course reviews</h2>
+                        </div>
+                        <% if (reviewStats.count > 0) { %>
+                            <p class="course-review-summary"><strong><%= reviewStats.averageRating.toFixed(1) %> / 5</strong> · <%= reviewStats.count %> reviews</p>
+                        <% } else { %>
+                            <p class="course-review-summary">No reviews yet</p>
+                        <% } %>
+                    </div>
+                    <% if (canReview) { %>
+                        <form class="course-community-form" action="/courses/<%= course._id %>/reviews" method="POST">
+                            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                            <label for="review-rating">Your rating</label>
+                            <select id="review-rating" name="rating" required>
+                                <option value="" <%= existingReview ? '' : 'selected' %> disabled>Choose a rating</option>
+                                <% [5, 4, 3, 2, 1].forEach((rating) => { %>
+                                    <option value="<%= rating %>" <%= existingReview && existingReview.rating === rating ? 'selected' : '' %>><%= rating %> / 5</option>
+                                <% }); %>
+                            </select>
+                            <label for="review-comment">Review (optional)</label>
+                            <textarea id="review-comment" name="comment" rows="4" maxlength="1000"><%= existingReview ? existingReview.comment : '' %></textarea>
+                            <button class="enroll-button" type="submit"><%= existingReview ? 'Update your review' : 'Submit review' %></button>
+                        </form>
+                    <% } else if (!currentUser) { %>
+                        <p class="course-community-empty"><a href="/login?next=<%= encodeURIComponent(`/courses/${course._id}`) %>">Sign in and enroll</a> to review this course.</p>
+                    <% } else if (currentUser.role === 'student') { %>
+                        <p class="course-community-empty">Enroll in this course to leave a review.</p>
+                    <% } else { %>
+                        <p class="course-community-empty">Course reviews are available to enrolled students.</p>
+                    <% } %>
+                    <% if (reviews.length > 0) { %>
+                        <div class="course-community-list">
+                            <% reviews.forEach((review) => { %>
+                                <article class="course-community-item">
+                                    <div class="course-community-meta">
+                                        <strong><%= review.authorName %></strong>
+                                        <span><%= review.rating %> / 5</span>
+                                    </div>
+                                    <time datetime="<%= (review.updatedAt || review.createdAt).toISOString() %>"><%= (review.updatedAt || review.createdAt).toLocaleDateString() %></time>
+                                    <% if (review.comment) { %>
+                                        <p><%= review.comment %></p>
+                                    <% } %>
+                                </article>
+                            <% }); %>
+                        </div>
+                    <% } else { %>
+                        <p class="course-community-empty">Be the first enrolled student to review this course.</p>
+                    <% } %>
+                </section>
             </article>
             <aside class="enroll-panel">
                 <p class="eyebrow">Join this course</p>

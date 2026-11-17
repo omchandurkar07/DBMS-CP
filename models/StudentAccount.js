@@ -25,7 +25,7 @@ const studentAccountSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['student', 'teacher'],
+        enum: ['student'],
         default: 'student',
         required: true
     },

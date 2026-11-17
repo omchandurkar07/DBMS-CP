@@ -8,6 +8,8 @@ create an account, enroll, and keep track of their learning.
 
 - Browse active courses and filter by search term, subject category, or seat availability.
 - View course details, including instructor, duration, enrollment, and capacity.
+- Read course ratings and reviews, and let enrolled students add or update one review per course.
+- Let teachers share course announcements with enrolled students.
 - Compare up to three courses from the catalog.
 - Sign up, sign in, update a profile, and sign out.
 - Sign up and sign in as a teacher to manage courses from the teaching dashboard.
@@ -55,16 +57,18 @@ create an account, enroll, and keep track of their learning.
 
    Replace the URI with your database connection string if you use MongoDB
    Atlas. `MONGO_URI` is required. `PORT` is optional and defaults to `8080`.
-   Teacher signup is available at `/teacher/signup` and immediately grants the
-   teacher role; anyone can register as a teacher. To grant admin access, first
-   create the account, verify its identity, and add its MongoDB `_id` to
-   `ADMIN_ACCOUNT_IDS`. Existing accounts can also be granted teacher access by
-   adding their `_id` to `TEACHER_ACCOUNT_IDS`. Find an
-   account ID in MongoDB with
-   `db.studentaccounts.findOne({ email: "admin@example.com" }, { _id: 1 })`.
+   Teacher signup is available at `/teacher/signup` and stores teacher
+   credentials in the separate `teacheraccounts` collection. Student signup at
+   `/signup` stores student credentials in `studentaccounts`. To grant admin
+   access, first create the account, verify its identity, and add its MongoDB
+   `_id` to `ADMIN_ACCOUNT_IDS`. Find a student ID with
+   `db.studentaccounts.findOne({ email: "admin@example.com" }, { _id: 1 })`;
+   find a teacher ID with
+   `db.teacheraccounts.findOne({ email: "teacher@example.com" }, { _id: 1 })`.
    Separate multiple IDs with commas. Admin takes precedence if an ID appears
-   in both lists. The normal `/signup` route creates student accounts. Restart
-   the app after changing role configuration. Password reset requires SMTP
+   in both lists. Existing IDs in `TEACHER_ACCOUNT_IDS` are moved to
+   `teacheraccounts` by the migration below. Restart the app after changing
+   role configuration. Password reset requires SMTP
    settings and the canonical app URL. For production, set `APP_BASE_URL` to
    the HTTPS site origin, `SMTP_HOST` and `SMTP_PORT` to your mail provider,
    `SMTP_SECURE=true` when using implicit TLS (commonly port 465), optional
@@ -107,6 +111,25 @@ create an account, enroll, and keep track of their learning.
 The app connects to MongoDB, initializes its indexes, and inserts the starter
 courses if they are not already present. Existing course records are retained.
 
+### Move an existing database to `coursehub`
+
+MongoDB has no in-place database rename. The migration copies all collections
+from the database in `MONGO_URI` into a new `coursehub` database, moves teacher
+accounts from `studentaccounts` into `teacheraccounts`, and updates session,
+password-reset, and course-owner references. The source database is not changed
+or deleted. The destination must be empty; the migration stops rather than
+overwriting an existing database.
+
+1. Keep `MONGO_URI` pointed at the existing source database (for example,
+   `test`) and back up the database.
+2. Run `npm run db:migrate-coursehub`.
+3. After the migration reports success, change only the database name in
+   `MONGO_URI` to `coursehub`, then restart the app. For Atlas, make the same
+   database-name change in the deployment's environment settings.
+
+The `studentsessions` collection is retained because it stores active login
+sessions. The TTL index removes expired session documents automatically.
+
 ## Main pages and routes
 
 | Route | Description |
@@ -114,6 +137,8 @@ courses if they are not already present. Existing course records are retained.
 | `GET /` | Home page and featured courses |
 | `GET /courses` | Course catalog with search, category/availability filters, sorting, and pagination |
 | `GET /courses/:courseId` | Course details |
+| `POST /courses/:courseId/reviews` | Add or update an enrolled student's review (CSRF protected) |
+| `POST /manage/courses/:courseId/announcements` | Post an announcement for a managed course (teacher/admin, CSRF protected) |
 | `GET /courses/:courseId/photo` | Course photo |
 | `GET /my-learning` | Student dashboard and learning statistics |
 | `GET /my-courses` | Enrolled courses filtered by progress status |
@@ -163,6 +188,12 @@ Files are stored in a separate MongoDB collection rather than embedded in the
 course document. Only course owners and administrators can upload or remove
 materials; downloads are limited to those managers and enrolled students.
 
+Course reviews are visible on course details. Only enrolled students can
+submit or update their own rating and review; a unique course/student index
+prevents duplicate reviews. Teachers can post announcements only for courses
+they manage, and enrolled students can read those announcements on the course
+details page.
+
 Signed-in students' saved courses are stored as separate student/course records; guest catalog
 favorites remain browser-local. Weekly goals default to 300 minutes and can be
 set from 30 minutes to 1,680 minutes in 30-minute increments. Lesson activity
@@ -202,8 +233,11 @@ video files supported by the browser's native video player.
   optional photo, creator reference, and active status.
 - **CourseLearningMaterial** — bounded downloadable lesson file metadata and
   content, referenced by course and lesson.
-- **StudentAccount** — name, unique email, password hash and salt, student/teacher role, and weekly learning goal.
-- **StudentSession** — hashed session token, account reference, and expiration.
+- **CourseReview** — one rating and optional review per enrolled student/course pair.
+- **CourseAnnouncement** — teacher/admin course updates visible to managers and enrolled students.
+- **StudentAccount** — student name, unique email, password hash and salt, and weekly learning goal.
+- **TeacherAccount** — teacher name, unique email, password hash and salt, and weekly learning goal.
+- **StudentSession** — hashed session token, account reference and account model, and expiration.
 - **StudentSavedCourse** — a referenced student/course wishlist entry with a unique compound index.
 - **Enrollment** — student and course references, completed lesson IDs, last
   lesson and activity time, enrollment date, and a unique course/email pair
@@ -221,9 +255,10 @@ CourseHub is developed as a full-featured Course Project demonstrating practical
   - **Embedded Subdocuments**: Fast single-document reads without joins. Used for `Course.modules` and nested `lessons`.
   - **Normalized References (`ObjectId` links)**: Prevents document bloat and enables atomic independent updates. Used between `Enrollment -> Course`, `Enrollment -> StudentAccount`, and `CourseLearningMaterial -> Course`.
 - **Integrity Constraints & Validation**:
-  - **Unique Constraints**: Unique indexes on `studentaccounts.email` and `courses.code` to prevent duplicate identities and codes.
+  - **Unique Constraints**: Unique indexes on `studentaccounts.email`, `teacheraccounts.email`, and `courses.code` to prevent duplicate identities and codes.
   - **Compound Unique Constraints**:
     - `enrollments`: `{ course: 1, email: 1 }` prevents duplicate student enrollments in the same course.
+    - `coursereviews`: `{ course: 1, studentAccount: 1 }` permits one editable review per enrolled student and course.
     - `studentsavedcourses`: `{ studentAccount: 1, course: 1 }` prevents duplicate wishlist entries.
     - `studentlearningactivities`: `{ studentAccount: 1, course: 1, lesson: 1 }` guarantees idempotent lesson completions.
 - **Indexing Strategies**:
@@ -234,7 +269,7 @@ CourseHub is developed as a full-featured Course Project demonstrating practical
 - **Binary Data Storage (BLOB / Grid-Style Storage)**:
   - Binary buffers are stored for course photo assets and lesson materials with strict MIME-type validation and size caps (5 MB photos, 10 MB materials).
 - **Concurrency Control & Seat Capacity**:
-  - Atomic count checks before enrollment creation ensuring `enrollmentCount < course.capacity`.
+  - Capacity checks before enrollment creation ensuring `enrollmentCount < course.capacity`.
 
 ---
 
@@ -331,6 +366,18 @@ db.studentlearningactivities.aggregate([
       passwordSalt: "<random_salt>",
       role: "student",
       weeklyLearningGoalMinutes: 300,
+      createdAt: new Date(),
+      updatedAt: new Date()
+  });
+  ```
+- **Teacher Signup**:
+  ```javascript
+  db.teacheraccounts.insertOne({
+      name: "Alex Teacher",
+      email: "alex@example.com",
+      passwordHash: "<scrypt_derived_hash>",
+      passwordSalt: "<random_salt>",
+      role: "teacher",
       createdAt: new Date(),
       updatedAt: new Date()
   });

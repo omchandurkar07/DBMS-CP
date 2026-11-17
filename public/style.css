@@ -4179,3 +4179,143 @@ body {
         transition-duration: 0.01ms;
     }
 }
+
+.course-community-section {
+    margin-top: 28px;
+    padding-top: 24px;
+    border-top: 1px solid #ece3d8;
+}
+
+.course-community-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.course-community-heading .eyebrow {
+    margin: 0 0 4px;
+}
+
+.course-community-heading h2 {
+    margin: 0;
+    color: #3e3028;
+    font-size: 1.3rem;
+}
+
+.course-review-summary {
+    margin: 0;
+    color: #777067;
+    font-size: 0.82rem;
+}
+
+.course-review-summary strong {
+    color: #a6532f;
+    font-size: 1rem;
+}
+
+.course-community-form {
+    margin: 16px 0;
+    padding: 16px;
+    display: grid;
+    gap: 9px;
+    border: 1px solid #ece3d8;
+    border-radius: 10px;
+    background: #fffefa;
+}
+
+.course-community-form label {
+    color: #59493c;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.course-community-form input,
+.course-community-form select,
+.course-community-form textarea {
+    width: 100%;
+    min-height: 42px;
+    padding: 9px 11px;
+    border: 1px solid #e3d9ca;
+    border-radius: 7px;
+    color: #40352c;
+    background: #fff;
+    font: inherit;
+    font-size: 0.85rem;
+}
+
+.course-community-form textarea {
+    min-height: 96px;
+    resize: vertical;
+}
+
+.course-community-form input:focus,
+.course-community-form select:focus,
+.course-community-form textarea:focus {
+    border-color: #c0804c;
+    outline: none;
+    box-shadow: 0 0 0 3px rgb(166 83 47 / 13%);
+}
+
+.course-community-form .enroll-button {
+    justify-self: start;
+    margin-top: 3px;
+}
+
+.course-community-list {
+    margin-top: 16px;
+    display: grid;
+    gap: 10px;
+}
+
+.course-community-item {
+    padding: 15px;
+    border: 1px solid #ece3d8;
+    border-radius: 9px;
+    background: #fffefa;
+}
+
+.course-community-meta {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    color: #49382d;
+}
+
+.course-community-item time,
+.course-community-item > span {
+    color: #817568;
+    font-size: 0.74rem;
+}
+
+.course-community-item p {
+    margin: 9px 0;
+    color: #59493c;
+    font-size: 0.84rem;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.course-community-empty {
+    color: #777067;
+    font-size: 0.84rem;
+    line-height: 1.6;
+}
+
+.course-community-empty a,
+.course-updates-link {
+    color: #a6532f;
+    font-weight: 700;
+}
+
+@media (max-width: 640px) {
+    .course-community-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .course-community-form {
+        padding: 12px;
+    }
+}

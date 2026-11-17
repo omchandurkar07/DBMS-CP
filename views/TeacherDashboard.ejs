@@ -58,6 +58,7 @@
                                     <td><span class="status-badge <%= course.isActive ? 'status-published' : 'status-archived' %>"><%= course.isActive ? 'Published' : 'Archived' %></span></td>
                                     <td>
                                         <div class="dashboard-row-actions">
+                                            <a href="/courses/<%= course._id %>#course-announcements">View &amp; announce</a>
                                             <a href="/manage/courses/<%= course._id %>/edit">Edit</a>
                                             <form action="/manage/courses/<%= course._id %>/status" method="POST">
                                                 <input type="hidden" name="_csrf" value="<%= csrfToken %>">

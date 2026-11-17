@@ -8,7 +8,9 @@ const { promisify } = require('util');
 const { createHash, randomBytes, scrypt, timingSafeEqual } = require('crypto');
 const { rateLimit } = require('express-rate-limit');
 const Course = require('./models/Course');
+const CourseAnnouncement = require('./models/CourseAnnouncement');
 const CourseLearningMaterial = require('./models/CourseLearningMaterial');
+const CourseReview = require('./models/CourseReview');
 const {
     buildStarterCurriculum,
     curriculumByCourseCode,
@@ -20,6 +22,7 @@ const StudentAccount = require('./models/StudentAccount');
 const StudentLearningActivity = require('./models/StudentLearningActivity');
 const StudentSavedCourse = require('./models/StudentSavedCourse');
 const StudentSession = require('./models/StudentSession');
+const TeacherAccount = require('./models/TeacherAccount');
 
 require('dotenv').config();
 
@@ -126,6 +129,11 @@ const notices = {
     courseCreated: { type: 'success', message: 'The course has been created.' },
     courseUpdated: { type: 'success', message: 'The course has been updated.' },
     courseStatusUpdated: { type: 'success', message: 'The course status has been updated.' },
+    announcementPosted: { type: 'success', message: 'Your announcement was shared with enrolled students.' },
+    announcementInvalid: { type: 'error', message: 'Enter an announcement title (up to 120 characters) and message (up to 2,000 characters).' },
+    reviewSaved: { type: 'success', message: 'Your course review has been saved.' },
+    reviewInvalid: { type: 'error', message: 'Choose a rating from 1 to 5 and keep your review under 1,000 characters.' },
+    reviewEnrollmentRequired: { type: 'error', message: 'Enroll in this course before submitting a review.' },
     materialUploaded: { type: 'success', message: 'Learning material uploaded.' },
     materialRemoved: { type: 'success', message: 'Learning material removed.' },
     lessonCompleted: { type: 'success', message: 'Lesson completed. Your course progress has been updated.' },
@@ -142,10 +150,34 @@ function getConfiguredRole(account) {
     if (adminAccountIds.has(normalizedId)) {
         return 'admin';
     }
-    if (teacherAccountIds.has(normalizedId)) {
+    if (account.role === 'teacher' || teacherAccountIds.has(normalizedId)) {
         return 'teacher';
     }
     return account.role || 'student';
+}
+
+function getAccountModel(accountModel) {
+    if (accountModel === 'TeacherAccount') {
+        return TeacherAccount;
+    }
+    if (accountModel === 'StudentAccount') {
+        return StudentAccount;
+    }
+    throw new Error(`Unsupported account model: ${accountModel}`);
+}
+
+async function findAccountByEmail(email) {
+    const [student, teacher] = await Promise.all([
+        StudentAccount.findOne({ email }).select('_id email'),
+        TeacherAccount.findOne({ email }).select('_id email')
+    ]);
+    if (student && teacher) {
+        throw new Error('Email address exists in both account collections.');
+    }
+    if (teacher) {
+        return { account: teacher, accountModel: 'TeacherAccount' };
+    }
+    return student ? { account: student, accountModel: 'StudentAccount' } : null;
 }
 
 function escapeRegex(value) {
@@ -324,12 +356,13 @@ function requireRole(...roles) {
     };
 }
 
-async function createStudentSession(account, res) {
+async function createAccountSession(account, accountModel, res) {
     const token = randomBytes(32).toString('base64url');
     const expiresAt = new Date(Date.now() + sessionLifetimeMs);
     await StudentSession.create({
         tokenHash: hashToken(token),
         account: account._id,
+        accountModel,
         expiresAt
     });
     res.append('Set-Cookie', `${sessionCookieName}=${encodeURIComponent(token)}; ${cookieOptions(sessionLifetimeMs)}`);
@@ -473,11 +506,12 @@ app.use(async (req, res, next) => {
             expiresAt: { $gt: new Date() }
         }).lean();
         if (session) {
-            const account = await StudentAccount.findById(session.account)
+            const accountModel = session.accountModel || 'StudentAccount';
+            const account = await getAccountModel(accountModel).findById(session.account)
                 .select('_id name email role')
                 .lean();
             if (account) {
-                const user = { ...account, role: getConfiguredRole(account) };
+                const user = { ...account, accountModel, role: getConfiguredRole(account) };
                 req.user = user;
                 res.locals.currentUser = user;
             } else {
@@ -524,7 +558,17 @@ function createSignupHandler(authRole) {
         const passwordHash = (await scryptAsync(password, passwordSalt, 64)).toString('hex');
         let account;
         try {
-            account = await StudentAccount.create({ name, email, passwordHash, passwordSalt, role: authRole });
+            const AccountModel = authRole === 'teacher' ? TeacherAccount : StudentAccount;
+            const otherAccountModel = authRole === 'teacher' ? StudentAccount : TeacherAccount;
+            if (await otherAccountModel.exists({ email })) {
+                return res.status(409).render('Auth.ejs', {
+                    mode: 'signup',
+                    authRole,
+                    nextPath,
+                    authError: 'An account with that email already exists. Sign in instead.'
+                });
+            }
+            account = await AccountModel.create({ name, email, passwordHash, passwordSalt, role: authRole });
         } catch (error) {
             if (error.code === 11000) {
                 return res.status(409).render('Auth.ejs', {
@@ -537,7 +581,7 @@ function createSignupHandler(authRole) {
             throw error;
         }
 
-        await createStudentSession(account, res);
+        await createAccountSession(account, authRole === 'teacher' ? 'TeacherAccount' : 'StudentAccount', res);
         return res.redirect(nextPath);
     };
 }
@@ -547,9 +591,20 @@ function createLoginHandler(authRole) {
         const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
         const password = typeof req.body.password === 'string' ? req.body.password : '';
         const nextPath = safeNextPath(req.body.next);
-        const account = emailPattern.test(email) && email.length <= 254 && password.length <= 128
-            ? await StudentAccount.findOne({ email })
-            : null;
+        let account = null;
+        let accountModel = authRole === 'teacher' ? 'TeacherAccount' : 'StudentAccount';
+        if (emailPattern.test(email) && email.length <= 254 && password.length <= 128) {
+            account = authRole === 'teacher'
+                ? await TeacherAccount.findOne({ email })
+                : await StudentAccount.findOne({ email });
+            if (!account && authRole === 'student') {
+                const teacherAccount = await TeacherAccount.findOne({ email });
+                if (teacherAccount && getConfiguredRole(teacherAccount) === 'admin') {
+                    account = teacherAccount;
+                    accountModel = 'TeacherAccount';
+                }
+            }
+        }
         const attemptedHash = await scryptAsync(
             password.slice(0, 128),
             account ? account.passwordSalt : 'coursehub-login-dummy-salt',
@@ -566,7 +621,7 @@ function createLoginHandler(authRole) {
             });
         }
 
-        if (authRole === 'teacher' && getConfiguredRole(account) !== 'teacher') {
+        if (authRole === 'teacher' && !['teacher', 'admin'].includes(getConfiguredRole(account))) {
             return res.status(403).render('Auth.ejs', {
                 mode: 'login',
                 authRole,
@@ -575,7 +630,7 @@ function createLoginHandler(authRole) {
             });
         }
 
-        await createStudentSession(account, res);
+        await createAccountSession(account, accountModel, res);
         return res.redirect(nextPath);
     };
 }
@@ -616,15 +671,17 @@ app.post('/forgot-password', passwordResetRequestLimiter, requireCsrf, async (re
         });
     }
 
-    const account = await StudentAccount.findOne({ email }).select('_id email');
-    if (account) {
+    const accountRecord = await findAccountByEmail(email);
+    if (accountRecord) {
+        const { account, accountModel } = accountRecord;
         const resetToken = randomBytes(32).toString('base64url');
         const tokenHash = hashToken(resetToken);
         await PasswordResetToken.findOneAndUpdate(
-            { account: account._id },
+            { account: account._id, accountModel },
             {
                 $set: {
                     tokenHash,
+                    accountModel,
                     expiresAt: new Date(Date.now() + passwordResetTokenLifetimeMs)
                 }
             },
@@ -647,7 +704,7 @@ app.post('/forgot-password', passwordResetRequestLimiter, requireCsrf, async (re
                 ].join('\n')
             });
         } catch (error) {
-            await PasswordResetToken.deleteOne({ account: account._id, tokenHash });
+            await PasswordResetToken.deleteOne({ account: account._id, accountModel, tokenHash });
             console.error('Password reset email delivery failed:', error.message);
             return res.status(503).render('PasswordResetRequest.ejs', {
                 error: 'We could not send a reset email right now. Please try again later.',
@@ -697,7 +754,7 @@ app.post('/reset-password', passwordResetSubmitLimiter, requireCsrf, async (req,
     const existingToken = await PasswordResetToken.findOne({
         tokenHash,
         expiresAt: { $gt: new Date() }
-    }).select('account');
+    }).select('account accountModel');
     if (!existingToken) {
         return res.status(400).render('PasswordReset.ejs', {
             resetToken: '',
@@ -718,7 +775,8 @@ app.post('/reset-password', passwordResetSubmitLimiter, requireCsrf, async (req,
         });
     }
 
-    const accountUpdate = await StudentAccount.updateOne(
+    const accountModel = consumedToken.accountModel || 'StudentAccount';
+    const accountUpdate = await getAccountModel(accountModel).updateOne(
         { _id: consumedToken.account },
         { $set: { passwordSalt, passwordHash } }
     );
@@ -729,10 +787,10 @@ app.post('/reset-password', passwordResetSubmitLimiter, requireCsrf, async (req,
         });
     }
     await Promise.all([
-        StudentSession.deleteMany({ account: consumedToken.account }),
-        PasswordResetToken.deleteMany({ account: consumedToken.account })
+        StudentSession.deleteMany({ account: consumedToken.account, accountModel }),
+        PasswordResetToken.deleteMany({ account: consumedToken.account, accountModel })
     ]);
-    return res.redirect('/login?status=passwordResetComplete');
+    return res.redirect(`${accountModel === 'TeacherAccount' ? '/teacher/login' : '/login'}?status=passwordResetComplete`);
 });
 
 app.get('/dashboard', requireAuth, (req, res) => {
@@ -756,8 +814,9 @@ app.post('/logout', requireAuth, requireCsrf, async (req, res) => {
 });
 
 app.get('/profile', requireAuth, async (req, res) => {
+    const AccountModel = getAccountModel(req.user.accountModel);
     const [account, enrollmentCount] = await Promise.all([
-        StudentAccount.findById(req.user._id)
+        AccountModel.findById(req.user._id)
             .select('_id name email role createdAt weeklyLearningGoalMinutes')
             .lean(),
         Enrollment.countDocuments({ studentAccount: req.user._id })
@@ -780,7 +839,7 @@ app.post('/profile', requireAuth, requireCsrf, async (req, res) => {
         return res.status(400).redirect('/profile?status=profileInvalid');
     }
 
-    const account = await StudentAccount.findByIdAndUpdate(
+    const account = await getAccountModel(req.user.accountModel).findByIdAndUpdate(
         req.user._id,
         { $set: { name } },
         { new: true, runValidators: true }
@@ -1014,7 +1073,8 @@ app.get('/courses/:courseId', async (req, res) => {
     }
     let canManageCourse = Boolean(course && req.user && (
         req.user.role === 'admin' ||
-        (req.user.role === 'teacher' && course.createdBy && course.createdBy.toString() === req.user._id.toString())
+        (req.user.role === 'teacher' && course.createdByModel === req.user.accountModel &&
+            course.createdBy && course.createdBy.toString() === req.user._id.toString())
     ));
     if (!course && req.user && ['teacher', 'admin'].includes(req.user.role)) {
         const manageableCourse = await findManageableCourse(req.params.courseId, req.user);
@@ -1050,13 +1110,82 @@ app.get('/courses/:courseId', async (req, res) => {
             materialsByLesson[lessonId].push(material);
         }
     }
+    const [reviews, reviewSummary, existingReview, announcements] = await Promise.all([
+        CourseReview.find({ course: course._id })
+            .select('authorName rating comment createdAt updatedAt')
+            .sort({ updatedAt: -1 })
+            .limit(20)
+            .lean(),
+        CourseReview.aggregate([
+            { $match: { course: course._id } },
+            { $group: { _id: null, averageRating: { $avg: '$rating' }, count: { $sum: 1 } } }
+        ]),
+        enrollment
+            ? CourseReview.findOne({ course: course._id, studentAccount: req.user._id }).lean()
+            : Promise.resolve(null),
+        learningEnrollment || canManageCourse
+            ? CourseAnnouncement.find({ course: course._id }).sort({ createdAt: -1 }).limit(10).lean()
+            : Promise.resolve([])
+    ]);
+    const reviewStats = reviewSummary[0] || { averageRating: 0, count: 0 };
+
     return res.render('CourseDetails.ejs', {
         course,
         learningEnrollment,
         materialsByLesson,
         canManageCourse,
+        canReview: Boolean(enrollment),
+        existingReview,
+        reviews,
+        reviewStats,
+        announcements,
         notice: getNotice(req)
     });
+});
+
+app.post('/courses/:courseId/reviews', requireAuth, requireRole('student'), requireCsrf, async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.courseId)) {
+        return res.status(404).render('NotFound.ejs');
+    }
+
+    const course = await Course.findById(req.params.courseId).select('_id').lean();
+    if (!course) {
+        return res.status(404).render('NotFound.ejs');
+    }
+    const isEnrolled = await Enrollment.exists({
+        course: course._id,
+        studentAccount: req.user._id
+    });
+    if (!isEnrolled) {
+        return res.redirect(`/courses/${course._id}?status=reviewEnrollmentRequired#course-reviews`);
+    }
+
+    const ratingInput = typeof req.body.rating === 'string' ? req.body.rating.trim() : '';
+    const rating = /^[1-5]$/.test(ratingInput) ? Number(ratingInput) : NaN;
+    const comment = typeof req.body.comment === 'string' ? req.body.comment.trim() : '';
+    if (!Number.isInteger(rating) || comment.length > 1000) {
+        return res.redirect(`/courses/${course._id}?status=reviewInvalid#course-reviews`);
+    }
+
+    const reviewFilter = { course: course._id, studentAccount: req.user._id };
+    const reviewUpdate = { $set: { authorName: req.user.name, rating, comment } };
+    try {
+        await CourseReview.updateOne(reviewFilter, reviewUpdate, {
+            upsert: true,
+            runValidators: true,
+            setDefaultsOnInsert: true
+        });
+    } catch (error) {
+        if (error.code !== 11000) {
+            throw error;
+        }
+        const retry = await CourseReview.updateOne(reviewFilter, reviewUpdate, { runValidators: true });
+        if (retry.matchedCount !== 1) {
+            throw error;
+        }
+    }
+
+    return res.redirect(`/courses/${course._id}?status=reviewSaved#course-reviews`);
 });
 
 app.post('/manage/courses/:courseId/lessons/:lessonId/materials', requireAuth, requireRole('teacher', 'admin'), courseMaterialUploadLimiter, parseLearningMaterial, requireCsrf, async (req, res) => {
@@ -1124,7 +1253,7 @@ app.get('/courses/:courseId/materials/:materialId', requireAuth, async (req, res
         return res.sendStatus(404);
     }
     const [course, material] = await Promise.all([
-        Course.findById(req.params.courseId).select('createdBy modules._id modules.lessons._id').lean(),
+        Course.findById(req.params.courseId).select('createdBy createdByModel modules._id modules.lessons._id').lean(),
         CourseLearningMaterial.findOne({
             _id: req.params.materialId,
             course: req.params.courseId
@@ -1140,7 +1269,8 @@ app.get('/courses/:courseId/materials/:materialId', requireAuth, async (req, res
         return res.sendStatus(404);
     }
     const isCourseManager = req.user.role === 'admin' ||
-        (req.user.role === 'teacher' && course.createdBy &&
+        (req.user.role === 'teacher' && course.createdByModel === req.user.accountModel &&
+            course.createdBy &&
             course.createdBy.toString() === req.user._id.toString());
     const isEnrolled = req.user.role === 'student' && await Enrollment.exists({
         course: course._id,
@@ -1468,7 +1598,10 @@ app.post('/learn/:courseId/:lessonId/complete', requireAuth, requireRole('studen
 
 app.get('/teacher', requireAuth, requireRole('teacher'), async (req, res) => {
     const [courses, courseCount, activeCourseCount, enrollmentCount, studentCount] = await Promise.all([
-        getCoursesWithEnrollmentCounts({ createdBy: req.user._id }, true),
+        getCoursesWithEnrollmentCounts({
+            createdBy: req.user._id,
+            createdByModel: req.user.accountModel
+        }, true),
         Course.countDocuments(),
         Course.countDocuments({ isActive: true }),
         Enrollment.countDocuments(),
@@ -1483,8 +1616,9 @@ app.get('/teacher', requireAuth, requireRole('teacher'), async (req, res) => {
 });
 
 app.get('/admin', requireAuth, requireRole('admin'), async (req, res) => {
-    const [accounts, courses, enrollments] = await Promise.all([
-        StudentAccount.find().select('_id name email role createdAt').sort({ createdAt: -1 }).lean(),
+    const [studentAccounts, teacherAccounts, courses, enrollments] = await Promise.all([
+        StudentAccount.find().select('_id name email role createdAt').lean(),
+        TeacherAccount.find().select('_id name email role createdAt').lean(),
         getCoursesWithEnrollmentCounts({}, true),
         Enrollment.find()
             .populate('studentAccount', 'name email')
@@ -1494,10 +1628,12 @@ app.get('/admin', requireAuth, requireRole('admin'), async (req, res) => {
     ]);
 
     return res.render('AdminDashboard.ejs', {
-        accounts: accounts.map((account) => ({
-            ...account,
-            role: getConfiguredRole(account)
-        })),
+        accounts: [...studentAccounts, ...teacherAccounts]
+            .sort((first, second) => second.createdAt - first.createdAt)
+            .map((account) => ({
+                ...account,
+                role: getConfiguredRole(account)
+            })),
         courses,
         enrollments,
         notice: getNotice(req)
@@ -1604,6 +1740,7 @@ async function findManageableCourse(courseId, user) {
     const filter = { _id: courseId };
     if (user.role !== 'admin') {
         filter.createdBy = user._id;
+        filter.createdByModel = user.accountModel;
     }
     return Course.findOne(filter).select('-photoData');
 }
@@ -1642,7 +1779,8 @@ app.post('/manage/courses', requireAuth, requireRole('teacher', 'admin'), parseC
             code: generateCourseCode(course.title),
             photoData: req.file.buffer,
             photoContentType,
-            createdBy: req.user._id
+            createdBy: req.user._id,
+            createdByModel: req.user.accountModel
         });
     } catch (createError) {
         if (createError.code === 11000) {
@@ -1745,6 +1883,29 @@ app.post('/manage/courses/:courseId/status', requireAuth, requireRole('teacher',
     course.isActive = req.body.isActive === 'true';
     await course.save();
     return res.redirect(`${courseDashboardPath(req.user)}?status=courseStatusUpdated`);
+});
+
+app.post('/manage/courses/:courseId/announcements', requireAuth, requireRole('teacher', 'admin'), requireCsrf, async (req, res) => {
+    const course = await findManageableCourse(req.params.courseId, req.user);
+    if (!course) {
+        return res.status(404).render('NotFound.ejs');
+    }
+
+    const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
+    const message = typeof req.body.message === 'string' ? req.body.message.trim() : '';
+    if (!title || title.length > 120 || !message || message.length > 2000) {
+        return res.redirect(`/courses/${course._id}?status=announcementInvalid#course-announcements`);
+    }
+
+    await CourseAnnouncement.create({
+        course: course._id,
+        authorAccount: req.user._id,
+        authorAccountModel: req.user.accountModel,
+        authorName: req.user.name,
+        title,
+        message
+    });
+    return res.redirect(`/courses/${course._id}?status=announcementPosted#course-announcements`);
 });
 
 app.post('/enroll', requireAuth, requireRole('student'), requireCsrf, async (req, res) => {
@@ -1856,7 +2017,7 @@ async function repairCourseLessonIds() {
 }
 
 const courseDetailCurriculumSelect =
-    'title category instructor description duration capacity photoContentType updatedAt createdBy ' +
+    'title category instructor description duration capacity photoContentType updatedAt createdBy createdByModel ' +
     'modules._id modules.title modules.lessons._id modules.lessons.title modules.lessons.summary modules.lessons.durationMinutes';
 
 async function seedCourseCurriculum() {
@@ -2162,9 +2323,12 @@ async function startServer() {
 
     await mongoose.connect(process.env.MONGO_URI);
     await Promise.all([
+        CourseAnnouncement.init(),
         Course.init(),
         Enrollment.init(),
+        CourseReview.init(),
         StudentAccount.init(),
+        TeacherAccount.init(),
         StudentLearningActivity.init(),
         StudentSavedCourse.init(),
         StudentSession.init(),

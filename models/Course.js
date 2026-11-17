@@ -106,7 +106,13 @@ const courseSchema = new mongoose.Schema({
     },
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'StudentAccount',
+        refPath: 'createdByModel',
+        index: true
+    },
+    createdByModel: {
+        type: String,
+        enum: ['StudentAccount', 'TeacherAccount'],
+        default: 'StudentAccount',
         index: true
     },
     isActive: {
